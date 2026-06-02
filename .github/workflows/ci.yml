@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**", "fix/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  stylua:
+    name: Lua Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: JohnnyMorganz/stylua-action@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+          args: --check lua/ tests/
+
+  test:
+    name: Tests (Neovim ${{ matrix.neovim }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        neovim: [stable, nightly]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.neovim }}
+
+      - name: Check out plenary.nvim
+        uses: actions/checkout@v6
+        with:
+          repository: nvim-lua/plenary.nvim
+          path: deps/plenary.nvim
+
+      - name: Check out telescope.nvim
+        uses: actions/checkout@v6
+        with:
+          repository: nvim-telescope/telescope.nvim
+          path: deps/telescope.nvim
+
+      - name: Install m1-lint (best-effort, enables the rules-sync spec)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          gh release download --repo C-Nucifora/m1-lint \
+            --pattern "m1-lint-x86_64-unknown-linux-gnu" \
+            -O "$HOME/.local/bin/m1-lint" 2>/dev/null \
+            && chmod +x "$HOME/.local/bin/m1-lint" || true
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run tests
+        env:
+          PLENARY_PATH: ${{ github.workspace }}/deps/plenary.nvim
+          TELESCOPE_PATH: ${{ github.workspace }}/deps/telescope.nvim
+        run: scripts/test.sh
