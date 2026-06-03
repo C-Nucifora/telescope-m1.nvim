@@ -1,12 +1,31 @@
 local rules = require("telescope-m1.rules")
 
 describe("telescope-m1.rules", function()
-  it("lists L001..L012 in order with unique codes", function()
+  it("lists the m1-lint rules in code order with unique codes", function()
     local all = rules.all()
-    assert.equals(12, #all)
-    for i, r in ipairs(all) do
-      assert.equals(("L%03d"):format(i), r.code)
+    local codes = {}
+    for _, r in ipairs(all) do
+      codes[#codes + 1] = r.code
     end
+    -- m1-lint defines no L013; the catalogue jumps from L012 to L014.
+    assert.same({
+      "L001",
+      "L002",
+      "L003",
+      "L004",
+      "L005",
+      "L006",
+      "L007",
+      "L008",
+      "L009",
+      "L010",
+      "L011",
+      "L012",
+      "L014",
+      "L015",
+      "L016",
+      "L017",
+    }, codes)
   end)
 
   it("marks exactly the m1-lint-fixable rules as fixable", function()

@@ -85,10 +85,10 @@ M.rules = {
   },
   {
     code = "L010",
-    name = "tab-for-indentation",
+    name = "indentation-style",
     severity = "warning",
     fixable = false,
-    summary = "tab character used for indentation",
+    summary = "indentation does not match the configured style",
   },
   {
     code = "L011",
@@ -103,6 +103,35 @@ M.rules = {
     severity = "warning",
     fixable = false,
     summary = "local binding is never used",
+  },
+  -- Note: m1-lint defines no L013; the catalogue jumps from L012 to L014.
+  {
+    code = "L014",
+    name = "expand-undefined-variable",
+    severity = "error",
+    fixable = false,
+    summary = "expand references a variable that is not defined",
+  },
+  {
+    code = "L015",
+    name = "local-missing-initializer",
+    severity = "warning",
+    fixable = false,
+    summary = "local declared without an initializer",
+  },
+  {
+    code = "L016",
+    name = "local-variable-naming",
+    severity = "warning",
+    fixable = false,
+    summary = "local name does not follow the naming convention",
+  },
+  {
+    code = "L017",
+    name = "magic-number",
+    severity = "warning",
+    fixable = false,
+    summary = "unnamed numeric literal (magic number)",
   },
 }
 
