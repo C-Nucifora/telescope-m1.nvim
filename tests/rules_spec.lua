@@ -25,6 +25,8 @@ describe("telescope-m1.rules", function()
       "L015",
       "L016",
       "L017",
+      "L018",
+      "L019",
     }, codes)
   end)
 
@@ -36,10 +38,15 @@ describe("telescope-m1.rules", function()
       end
     end
     -- Matches m1-lint's LintCode::fixable.
-    assert.same(
-      { L002 = true, L003 = true, L004 = true, L005 = true, L007 = true, L011 = true },
-      fixable
-    )
+    assert.same({
+      L002 = true,
+      L003 = true,
+      L004 = true,
+      L005 = true,
+      L007 = true,
+      L011 = true,
+      L018 = true,
+    }, fixable)
   end)
 
   it("gives every rule a name, severity and summary", function()

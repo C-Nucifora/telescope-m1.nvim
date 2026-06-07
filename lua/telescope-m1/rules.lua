@@ -133,6 +133,20 @@ M.rules = {
     fixable = false,
     summary = "unnamed numeric literal (magic number)",
   },
+  {
+    code = "L018",
+    name = "semicolon-spacing",
+    severity = "warning",
+    fixable = true,
+    summary = "incorrect spacing around a semicolon",
+  },
+  {
+    code = "L019",
+    name = "cognitive-complexity",
+    severity = "warning",
+    fixable = false,
+    summary = "function cognitive complexity exceeds the configured maximum",
+  },
 }
 
 --- All rules, in code order.
