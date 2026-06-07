@@ -34,6 +34,16 @@ end
 
 --- Append a rule code to the nearest .m1lint.toml `ignore` list (creating the
 --- file if necessary). Best-effort, line-oriented to avoid a TOML dependency.
+---
+--- LIMITATION: this does NOT parse the TOML. It appends a fresh
+--- `ignore = ["L0xx"]` line rather than merging into an existing `ignore`
+--- array. If the file already has a top-level `ignore` key, this produces a
+--- DUPLICATE key. Depending on how m1-lint's TOML loader handles duplicates
+--- (typically last-wins, or a hard parse error), the previously-ignored codes
+--- can be silently dropped or the whole config rejected. A real fix needs a
+--- TOML parser to read, extend and rewrite the array in place; until then we
+--- warn the user and tell them to verify the file by hand. We only skip the
+--- write entirely when the exact code is already on an `ignore` line.
 local function ignore_in_config(code)
   local dir = vim.fn.getcwd()
   local buf = vim.api.nvim_buf_get_name(0)
@@ -45,6 +55,7 @@ local function ignore_in_config(code)
   local path = found[1] or (vim.fn.getcwd() .. "/.m1lint.toml")
 
   local lines = vim.fn.filereadable(path) == 1 and vim.fn.readfile(path) or {}
+  local has_ignore = false
   for _, l in ipairs(lines) do
     if l:find("ignore") and l:find(code, 1, true) then
       vim.notify(
@@ -53,10 +64,24 @@ local function ignore_in_config(code)
       )
       return
     end
+    -- Detect a pre-existing top-level `ignore = [...]` assignment so we can
+    -- warn that appending may shadow it (see the LIMITATION note above).
+    if l:match("^%s*ignore%s*=") then
+      has_ignore = true
+    end
   end
   table.insert(lines, ('ignore = ["%s"]'):format(code))
   vim.fn.writefile(lines, path)
   vim.notify("telescope-m1: appended " .. code .. " to ignore in " .. path)
+  if has_ignore then
+    vim.notify(
+      "telescope-m1: "
+        .. path
+        .. " already has an `ignore` key; this appended a second one and any "
+        .. "previously-ignored codes may be overwritten — please verify the file.",
+      vim.log.levels.WARN
+    )
+  end
 end
 
 ---@param opts? table
