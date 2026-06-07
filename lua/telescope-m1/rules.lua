@@ -163,13 +163,35 @@ function M.parse_catalogue(output)
   return by_code
 end
 
+--- Resolve the m1-lint command, preferring the binary nvim-m1 manages (which
+--- may be bundled under `stdpath("data")` and not on `$PATH`) and falling back
+--- to a plain `$PATH` lookup. Mirrors how `telescope-m1/lsp.lua` defers to
+--- nvim-m1 so the two never disagree about which toolchain is in use.
+---@return string?  An executable command/path for m1-lint, or nil.
+local function resolve_m1_lint()
+  local ok, install = pcall(require, "nvim-m1.install")
+  if ok and type(install.resolve) == "function" then
+    local resolved = install.resolve("m1-lint")
+    if resolved then
+      return resolved
+    end
+  end
+  if vim.fn.executable("m1-lint") == 1 then
+    return "m1-lint"
+  end
+  return nil
+end
+
 --- Query the m1-lint binary for its rule catalogue, or nil if unavailable.
+--- Resolves the bundled nvim-m1 binary too (not just `$PATH`), so the rules
+--- sync test runs whenever the plugin is installed.
 ---@return table<string, { name: string, fixable: boolean }>?
 function M.binary_catalogue()
-  if vim.fn.executable("m1-lint") ~= 1 then
+  local cmd = resolve_m1_lint()
+  if not cmd then
     return nil
   end
-  local out = vim.fn.system({ "m1-lint", "--rules", "--format", "json" })
+  local out = vim.fn.system({ cmd, "--rules", "--format", "json" })
   if vim.v.shell_error ~= 0 then
     return nil
   end
