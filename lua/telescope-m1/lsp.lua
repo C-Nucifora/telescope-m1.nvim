@@ -20,8 +20,12 @@ end
 
 --- Find the active m1-lsp client.
 ---
---- Prefers a client named like m1-lsp; otherwise any client attached to an
---- m1scr filetype or advertising workspace-symbol support.
+--- Prefers a client named like m1-lsp; otherwise any client configured for the
+--- `m1scr` filetype. We deliberately do NOT fall back to "any client
+--- advertising workspace-symbol support": general-purpose servers (lua_ls,
+--- pyright, …) all advertise `workspaceSymbolProvider`, so that fallback would
+--- pick the wrong server and present its (non-M1) symbols as M1 components.
+--- Only the `m1scr` filetype is a reliable M1 signal.
 ---@return vim.lsp.Client?
 function M.find_client()
   local clients = vim.lsp.get_clients()
@@ -36,8 +40,7 @@ function M.find_client()
 
   for _, c in ipairs(clients) do
     local fts = (c.config or {}).filetypes or {}
-    local caps = c.server_capabilities or {}
-    if vim.tbl_contains(fts, "m1scr") or caps.workspaceSymbolProvider then
+    if vim.tbl_contains(fts, "m1scr") then
       return c
     end
   end
