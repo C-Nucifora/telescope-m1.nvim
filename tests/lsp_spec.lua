@@ -60,6 +60,65 @@ describe("telescope-m1.lsp.build_hierarchy", function()
   end)
 end)
 
+describe("telescope-m1.lsp.find_client", function()
+  local orig_get_clients
+
+  before_each(function()
+    orig_get_clients = vim.lsp.get_clients
+  end)
+
+  after_each(function()
+    vim.lsp.get_clients = orig_get_clients
+  end)
+
+  it("ignores a generic LSP that merely advertises workspaceSymbolProvider", function()
+    -- lua_ls et al. advertise workspaceSymbolProvider but are not m1-lsp.
+    -- Picking one would send workspace/symbol to the wrong server and present
+    -- non-M1 results; we must treat "no m1-lsp client" as no client.
+    vim.lsp.get_clients = function()
+      return {
+        {
+          name = "lua_ls",
+          config = { filetypes = { "lua" } },
+          server_capabilities = { workspaceSymbolProvider = true },
+        },
+      }
+    end
+    assert.is_nil(m1_lsp.find_client())
+  end)
+
+  it("matches an m1-lsp client by its m1scr filetype even under an odd name", function()
+    vim.lsp.get_clients = function()
+      return {
+        {
+          name = "lua_ls",
+          config = { filetypes = { "lua" } },
+          server_capabilities = { workspaceSymbolProvider = true },
+        },
+        {
+          name = "my-custom-m1",
+          config = { filetypes = { "m1scr" } },
+          server_capabilities = { workspaceSymbolProvider = true },
+        },
+      }
+    end
+    local c = m1_lsp.find_client()
+    assert.is_not_nil(c)
+    assert.equals("my-custom-m1", c.name)
+  end)
+
+  it("matches an m1-lsp client by its canonical name", function()
+    vim.lsp.get_clients = function()
+      return {
+        { name = "m1lsp", config = { filetypes = {} }, server_capabilities = {} },
+      }
+    end
+    local c = m1_lsp.find_client()
+    assert.is_not_nil(c)
+    assert.equals("m1lsp", c.name)
+  end)
+end)
+
 describe("telescope-m1.lsp.workspace_symbols", function()
   it("reports an error when no m1-lsp client is attached", function()
     -- No m1 client in the headless test session.
