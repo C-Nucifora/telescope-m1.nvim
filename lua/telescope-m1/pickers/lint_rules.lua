@@ -10,6 +10,7 @@ local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
 local entry_display = require("telescope.pickers.entry_display")
 local rules = require("telescope-m1.rules")
+local ignore = require("telescope-m1.ignore")
 
 local function make_entry(displayer)
   return function(rule)
@@ -32,18 +33,11 @@ local function make_entry(displayer)
   end
 end
 
---- Append a rule code to the nearest .m1lint.toml `ignore` list (creating the
---- file if necessary). Best-effort, line-oriented to avoid a TOML dependency.
----
---- LIMITATION: this does NOT parse the TOML. It appends a fresh
---- `ignore = ["L0xx"]` line rather than merging into an existing `ignore`
---- array. If the file already has a top-level `ignore` key, this produces a
---- DUPLICATE key. Depending on how m1-lint's TOML loader handles duplicates
---- (typically last-wins, or a hard parse error), the previously-ignored codes
---- can be silently dropped or the whole config rejected. A real fix needs a
---- TOML parser to read, extend and rewrite the array in place; until then we
---- warn the user and tell them to verify the file by hand. We only skip the
---- write entirely when the exact code is already on an `ignore` line.
+--- Add a rule code to the nearest .m1lint.toml `ignore` list (creating the file
+--- if necessary), merging into an existing single-line `ignore` array rather
+--- than appending a duplicate key. Best-effort, line-oriented to avoid a TOML
+--- dependency; genuinely-complex cases (multi-line arrays) fall back to a
+--- warn-and-append so the file is never corrupted.
 local function ignore_in_config(code)
   local dir = vim.fn.getcwd()
   local buf = vim.api.nvim_buf_get_name(0)
@@ -55,32 +49,30 @@ local function ignore_in_config(code)
   local path = found[1] or (vim.fn.getcwd() .. "/.m1lint.toml")
 
   local lines = vim.fn.filereadable(path) == 1 and vim.fn.readfile(path) or {}
-  local has_ignore = false
-  for _, l in ipairs(lines) do
-    if l:find("ignore") and l:find(code, 1, true) then
-      vim.notify(
-        "telescope-m1: " .. code .. " already ignored in " .. path,
-        vim.log.levels.INFO
-      )
-      return
-    end
-    -- Detect a pre-existing top-level `ignore = [...]` assignment so we can
-    -- warn that appending may shadow it (see the LIMITATION note above).
-    if l:match("^%s*ignore%s*=") then
-      has_ignore = true
-    end
+  local new_lines, status = ignore.merge_ignore(lines, code)
+
+  if status == "already_ignored" then
+    vim.notify(
+      "telescope-m1: " .. code .. " already ignored in " .. path,
+      vim.log.levels.INFO
+    )
+    return
   end
-  table.insert(lines, ('ignore = ["%s"]'):format(code))
-  vim.fn.writefile(lines, path)
-  vim.notify("telescope-m1: appended " .. code .. " to ignore in " .. path)
-  if has_ignore then
+
+  vim.fn.writefile(new_lines, path)
+
+  if status == "fallback" then
     vim.notify(
       "telescope-m1: "
         .. path
-        .. " already has an `ignore` key; this appended a second one and any "
-        .. "previously-ignored codes may be overwritten — please verify the file.",
+        .. " has an `ignore` key this tool can't safely edit (multi-line array); "
+        .. 'appended a second `ignore = ["'
+        .. code
+        .. '"]` — please merge it by hand to avoid a duplicate key.',
       vim.log.levels.WARN
     )
+  else
+    vim.notify("telescope-m1: added " .. code .. " to ignore in " .. path)
   end
 end
 
