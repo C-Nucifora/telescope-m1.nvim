@@ -32,3 +32,11 @@ describe("telescope m1 extension", function()
     end
   )
 end)
+
+describe("next-gen pickers", function()
+  it("exports call_rates (#10)", function()
+    local telescope = require("telescope")
+    telescope.load_extension("m1")
+    assert.is_function(telescope.extensions.m1.call_rates)
+  end)
+end)

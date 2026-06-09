@@ -4,6 +4,7 @@
 ---   workspace_symbols  fuzzy-search all channels, parameters, enums (m1-lsp)
 ---   components         browse the Project.m1prj component hierarchy
 ---   lint_rules         pick an m1-lint rule to document / yank / ignore
+---   call_rates         browse execution-rate clocks; assign scripts (#10)
 local ok, telescope = pcall(require, "telescope")
 if not ok then
   error("telescope-m1.nvim requires nvim-telescope/telescope.nvim")
@@ -21,5 +22,6 @@ return telescope.register_extension({
     workspace_symbols = require("telescope-m1.pickers.workspace_symbols"),
     components = require("telescope-m1.pickers.components"),
     lint_rules = require("telescope-m1.pickers.lint_rules"),
+    call_rates = require("telescope-m1.pickers.call_rates"),
   },
 })
