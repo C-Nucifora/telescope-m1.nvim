@@ -27,6 +27,10 @@ describe("telescope-m1.rules", function()
       "L017",
       "L018",
       "L019",
+      "L020",
+      "L021",
+      "L022",
+      "L023",
     }, codes)
   end)
 
@@ -46,6 +50,8 @@ describe("telescope-m1.rules", function()
       L007 = true,
       L011 = true,
       L018 = true,
+      L022 = true,
+      L023 = true,
     }, fixable)
   end)
 

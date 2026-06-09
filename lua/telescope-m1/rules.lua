@@ -147,6 +147,34 @@ M.rules = {
     fixable = false,
     summary = "function cognitive complexity exceeds the configured maximum",
   },
+  {
+    code = "L020",
+    name = "object-naming",
+    severity = "warning",
+    fixable = false,
+    summary = "object names begin with an uppercase letter (manual p.64)",
+  },
+  {
+    code = "L021",
+    name = "one-statement-per-line",
+    severity = "warning",
+    fixable = false,
+    summary = "write only one statement per line (manual p.65)",
+  },
+  {
+    code = "L022",
+    name = "keyword-paren-spacing",
+    severity = "warning",
+    fixable = true,
+    summary = "put a space between a keyword and a parenthesis (`if (`)",
+  },
+  {
+    code = "L023",
+    name = "call-paren-spacing",
+    severity = "warning",
+    fixable = true,
+    summary = "no space between a function name and its parenthesis",
+  },
 }
 
 --- All rules, in code order.

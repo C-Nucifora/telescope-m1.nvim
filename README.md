@@ -54,6 +54,7 @@ Or via command palette:
 :Telescope m1 workspace_symbols
 :Telescope m1 components
 :Telescope m1 lint_rules
+:Telescope m1 call_rates
 ```
 
 ### Picker mappings
@@ -62,6 +63,9 @@ Or via command palette:
 | --- | --- | --- |
 | workspace_symbols / components | `<CR>` | jump to the symbol's definition |
 | components | `<C-f>` | (functions) jump to the backing script |
+| components | `<C-s>` / `<C-t>` / `<C-u>` | set the entry's security / storage type / display unit (via nvim-m1 + m1-project) |
+| call_rates | `<CR>` | browse the scripts scheduled at the picked rate |
+| call_rates | `<C-a>` | assign a script to the picked rate |
 | lint_rules | `<CR>` | open the rule's documentation |
 | lint_rules | `<C-y>` | yank the rule code (e.g. `L004`) |
 | lint_rules | `<C-i>` | append the code to the project's `.m1lint.toml` ignore list |

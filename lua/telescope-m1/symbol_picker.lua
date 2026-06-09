@@ -36,7 +36,7 @@ end
 
 --- Open a picker over `entries` (a list from `lsp.symbol_to_entry`).
 ---@param opts table
----@param spec { title: string, entries: table[], hierarchy?: boolean }
+---@param spec { title: string, entries: table[], hierarchy?: boolean, attach_mappings?: fun(bufnr: integer, map: fun()): boolean }
 function M.open(opts, spec)
   local displayer = entry_display.create({
     separator = " ",
@@ -52,13 +52,14 @@ function M.open(opts, spec)
       }),
       sorter = conf.generic_sorter(opts),
       previewer = conf.qflist_previewer(opts),
+      attach_mappings = spec.attach_mappings,
     })
     :find()
 end
 
 --- Fetch workspace symbols and open a picker, handling the empty/error cases.
 ---@param opts table
----@param spec { title: string, query?: string, hierarchy?: boolean, transform?: fun(entries: table[]): table[] }
+---@param spec { title: string, query?: string, hierarchy?: boolean, transform?: fun(entries: table[]): table[], attach_mappings?: fun(bufnr: integer, map: fun()): boolean }
 function M.from_lsp(opts, spec)
   m1_lsp.workspace_symbols(spec.query or "", function(entries, err)
     if err then
@@ -77,10 +78,12 @@ function M.from_lsp(opts, spec)
       entries = spec.transform(entries)
     end
     vim.schedule(function()
-      M.open(
-        opts,
-        { title = spec.title, entries = entries, hierarchy = spec.hierarchy }
-      )
+      M.open(opts, {
+        title = spec.title,
+        entries = entries,
+        hierarchy = spec.hierarchy,
+        attach_mappings = spec.attach_mappings,
+      })
     end)
   end)
 end
