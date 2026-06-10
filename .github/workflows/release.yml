@@ -38,8 +38,26 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: v${{ steps.v.outputs.version }}
         run: |
+          # Body: auto-generated "What's Changed" (PR list + full changelog
+          # link) followed by a consume/install snippet. PR titles may contain
+          # backticks, so the generated half never passes through an unquoted
+          # heredoc; the static half is a quoted heredoc with placeholders
+          # substituted afterwards.
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
+            -q .body > body.md || echo "_Generated notes unavailable._" > body.md
+          cat >> body.md <<'NOTES'
+
+          ## Install
+
+          ```lua
+          -- lazy.nvim (requires nvim-m1)
+          { "{{REPO}}", version = "{{TAG}}", dependencies = { "C-Nucifora/nvim-m1" } }
+          ```
+          NOTES
+          sed -i "s|{{REPO}}|$GITHUB_REPOSITORY|g; s|{{TAG}}|$TAG|g" body.md
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "telescope-m1.nvim $TAG" \
-            --generate-notes
+            --notes-file body.md
