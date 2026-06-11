@@ -175,6 +175,20 @@ M.rules = {
     fixable = true,
     summary = "no space between a function name and its parenthesis",
   },
+  {
+    code = "L024",
+    name = "ternary-condition-parens",
+    severity = "warning",
+    fixable = true,
+    summary = "ternary condition wrapped in parentheses: (condition) ? a : b",
+  },
+  {
+    code = "L025",
+    name = "local-scope-too-wide",
+    severity = "warning",
+    fixable = false,
+    summary = "local declared in a wider scope than its uses need",
+  },
 }
 
 --- All rules, in code order.
