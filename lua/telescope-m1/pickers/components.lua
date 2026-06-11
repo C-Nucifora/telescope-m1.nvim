@@ -11,6 +11,8 @@
 ---   <C-s>  set the entry's security level   (m1-project via nvim-m1, #9)
 ---   <C-t>  set the entry's storage type     (m1-project via nvim-m1, #9)
 ---   <C-u>  set the entry's display unit     (m1-project via nvim-m1, #9)
+---   <C-r>  rename the component             (m1-project via nvim-m1, #18)
+---   <C-d>  delete the component             (m1-project via nvim-m1, #18)
 local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
 local symbol_picker = require("telescope-m1.symbol_picker")
@@ -18,7 +20,7 @@ local m1_lsp = require("telescope-m1.lsp")
 
 --- Run one of nvim-m1's project editors with the selected component, closing
 --- the picker first (the editor opens its own prompts).
----@param fn_name "set_security"|"set_type"|"set_unit"
+---@param fn_name "set_security"|"set_type"|"set_unit"|"rename_component"|"delete_component"
 local function project_edit(fn_name)
   return function(bufnr)
     local entry = action_state.get_selected_entry()
@@ -70,6 +72,8 @@ return function(opts)
       map({ "i", "n" }, "<C-s>", project_edit("set_security"))
       map({ "i", "n" }, "<C-t>", project_edit("set_type"))
       map({ "i", "n" }, "<C-u>", project_edit("set_unit"))
+      map({ "i", "n" }, "<C-r>", project_edit("rename_component"))
+      map({ "i", "n" }, "<C-d>", project_edit("delete_component"))
       return true -- keep the default <CR> navigate
     end,
   })
