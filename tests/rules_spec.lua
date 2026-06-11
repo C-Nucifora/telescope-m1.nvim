@@ -9,7 +9,16 @@ describe("telescope-m1.rules", function()
 
   it("lists rules in code order with unique codes", function()
     local all = rules.all()
-    assert.is_true(#all >= 24, "expected at least the v0.14 rule set, got " .. #all)
+    local catalogue = rules.binary_catalogue()
+    if catalogue then
+      local n = 0
+      for _ in pairs(catalogue) do
+        n = n + 1
+      end
+      assert.equals(n, #all, "all() mirrors the binary catalogue")
+    else
+      assert.is_true(#all >= 24, "fallback table regressed: " .. #all)
+    end
     local seen = {}
     local prev = ""
     for _, r in ipairs(all) do

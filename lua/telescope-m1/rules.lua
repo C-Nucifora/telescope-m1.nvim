@@ -204,16 +204,22 @@ function M.all()
   if not catalogue then
     return M.fallback_rules
   end
+  local fallback_by_code = {}
+  for _, r in ipairs(M.fallback_rules) do
+    fallback_by_code[r.code] = r
+  end
   local list = {}
   for code, r in pairs(catalogue) do
+    -- A v1 binary emits no severity/summary: take them from the fallback
+    -- table for rules it knows, and synthesize for newer ones, so the picker
+    -- renders every rule either way.
+    local fb = fallback_by_code[code] or {}
     list[#list + 1] = {
       code = code,
       name = r.name,
-      -- A v1 binary emits no severity/summary; synthesize so the picker
-      -- renders every rule either way.
-      severity = r.severity or "warning",
+      severity = r.severity or fb.severity or "warning",
       fixable = r.fixable or false,
-      summary = r.summary or (r.name and r.name:gsub("%-", " ") or ""),
+      summary = r.summary or fb.summary or (r.name and r.name:gsub("%-", " ") or ""),
     }
   end
   table.sort(list, function(a, b)
