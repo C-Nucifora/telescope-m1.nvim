@@ -102,12 +102,18 @@ return function(opts)
               )
               return
             end
-            local name = require("nvim-m1.lsp").client_name
-            local uri = vim.uri_from_fname(prj)
-            for _, client in ipairs(vim.lsp.get_clients({ name = name })) do
-              client.notify("workspace/didChangeWatchedFiles", {
-                changes = { { uri = uri, type = 2 } },
-              })
+            -- Reuse nvim-m1's public reload notifier rather than duplicating the
+            -- didChangeWatchedFiles shape, so the two plugins stay in sync (#19).
+            -- notify_reload is public as of nvim-m1 v0.10.0 (#74); guard against
+            -- an older installed nvim-m1 so the picker degrades instead of
+            -- calling a nil value.
+            if project.notify_reload then
+              project.notify_reload(prj)
+            else
+              vim.notify(
+                "telescope-m1: update nvim-m1 to v0.10.0+ for live call-rate reload",
+                vim.log.levels.DEBUG
+              )
             end
             vim.notify("telescope-m1: " .. script .. " call rate -> " .. entry[1])
           end)
