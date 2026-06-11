@@ -1,11 +1,12 @@
 --- telescope-m1: the m1-lint rule registry.
 ---
---- The structural facts (code, name, fixability) are owned by m1-lint and can be
---- enumerated with `m1-lint --rules --format json`. This table additionally
---- carries presentation-only metadata m1-lint does not emit (severity colour,
---- one-line summary). A test (`rules_spec`) runs `m1-lint --rules` and asserts
---- the codes/names/fixability here match the binary, so the catalogue cannot
---- silently drift from the toolchain.
+--- The catalogue is owned by m1-lint and read at runtime from the bundled
+--- binary (`m1-lint --rules --format json`, schema v2 with severity + summary
+--- — C-Nucifora/m1-lint#118), so a new m1-lint release shows its rules here
+--- with zero changes to this repo. The static table below is only the
+--- fallback for sessions with no m1-lint binary at all; a v1 binary (no
+--- severity/summary fields) gets those synthesized. Results are cached per
+--- session (`M.reset()` clears).
 local M = {}
 
 --- Base documentation URL (the README "Rules" section).
@@ -18,8 +19,9 @@ M.docs_url = "https://github.com/C-Nucifora/m1-lint#rules"
 ---@field fixable boolean
 ---@field summary string
 
+--- Fallback only — used when no m1-lint binary can be resolved at all.
 ---@type M1LintRule[]
-M.rules = {
+M.fallback_rules = {
   {
     code = "L001",
     name = "line-too-long",
@@ -191,17 +193,47 @@ M.rules = {
   },
 }
 
---- All rules, in code order.
+--- All rules, in code order: the bundled binary's catalogue when available
+--- (cached per session), else the static fallback.
 ---@return M1LintRule[]
 function M.all()
-  return M.rules
+  if M._cache then
+    return M._cache
+  end
+  local catalogue = M.binary_catalogue()
+  if not catalogue then
+    return M.fallback_rules
+  end
+  local list = {}
+  for code, r in pairs(catalogue) do
+    list[#list + 1] = {
+      code = code,
+      name = r.name,
+      -- A v1 binary emits no severity/summary; synthesize so the picker
+      -- renders every rule either way.
+      severity = r.severity or "warning",
+      fixable = r.fixable or false,
+      summary = r.summary or (r.name and r.name:gsub("%-", " ") or ""),
+    }
+  end
+  table.sort(list, function(a, b)
+    return a.code < b.code
+  end)
+  M._cache = list
+  return list
 end
 
---- Parse `m1-lint --rules --format json` output into `{ code = { name, fixable } }`.
---- Returns nil if the binary is missing or the output is unparseable (e.g. an
---- older m1-lint without `--rules`).
+--- Drop the per-session cache (tests; after a toolchain update).
+function M.reset()
+  M._cache = nil
+end
+
+--- Parse `m1-lint --rules --format json` output into
+--- `{ code = { name, fixable, severity?, summary? } }` (severity/summary are
+--- present from catalogue schema v2). Returns nil if the output is
+--- unparseable (e.g. an older m1-lint without `--rules`).
 ---@param output string
----@return table<string, { name: string, fixable: boolean }>?
+---@return table<string, { name: string, fixable: boolean, severity: string?, summary: string? }>?
 function M.parse_catalogue(output)
   if not output or output == "" then
     return nil
@@ -213,7 +245,12 @@ function M.parse_catalogue(output)
   local by_code = {}
   for _, r in ipairs(data.rules) do
     if r.code then
-      by_code[r.code] = { name = r.name, fixable = r.fixable }
+      by_code[r.code] = {
+        name = r.name,
+        fixable = r.fixable,
+        severity = r.severity,
+        summary = r.summary,
+      }
     end
   end
   return by_code

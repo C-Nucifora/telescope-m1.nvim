@@ -1,61 +1,24 @@
 local rules = require("telescope-m1.rules")
 
+-- Schema-shape assertions only (#14): the catalogue is read from the m1-lint
+-- binary at runtime, so a newer m1-lint adding rules must NOT fail this suite.
 describe("telescope-m1.rules", function()
-  it("lists the m1-lint rules in code order with unique codes", function()
-    local all = rules.all()
-    local codes = {}
-    for _, r in ipairs(all) do
-      codes[#codes + 1] = r.code
-    end
-    -- m1-lint defines no L013; the catalogue jumps from L012 to L014.
-    assert.same({
-      "L001",
-      "L002",
-      "L003",
-      "L004",
-      "L005",
-      "L006",
-      "L007",
-      "L008",
-      "L009",
-      "L010",
-      "L011",
-      "L012",
-      "L014",
-      "L015",
-      "L016",
-      "L017",
-      "L018",
-      "L019",
-      "L020",
-      "L021",
-      "L022",
-      "L023",
-      "L024",
-      "L025",
-    }, codes)
+  before_each(function()
+    rules.reset()
   end)
 
-  it("marks exactly the m1-lint-fixable rules as fixable", function()
-    local fixable = {}
-    for _, r in ipairs(rules.all()) do
-      if r.fixable then
-        fixable[r.code] = true
-      end
+  it("lists rules in code order with unique codes", function()
+    local all = rules.all()
+    assert.is_true(#all >= 24, "expected at least the v0.14 rule set, got " .. #all)
+    local seen = {}
+    local prev = ""
+    for _, r in ipairs(all) do
+      assert.is_truthy(r.code:match("^L%d%d%d$"), r.code .. " shape")
+      assert.is_nil(seen[r.code], r.code .. " duplicated")
+      seen[r.code] = true
+      assert.is_true(prev < r.code, r.code .. " out of order")
+      prev = r.code
     end
-    -- Matches m1-lint's LintCode::fixable.
-    assert.same({
-      L002 = true,
-      L003 = true,
-      L004 = true,
-      L005 = true,
-      L007 = true,
-      L011 = true,
-      L018 = true,
-      L022 = true,
-      L023 = true,
-      L024 = true,
-    }, fixable)
   end)
 
   it("gives every rule a name, severity and summary", function()
@@ -66,48 +29,53 @@ describe("telescope-m1.rules", function()
         r.code .. " severity"
       )
       assert.is_true(#r.summary > 0, r.code .. " has a summary")
+      assert.is_true(type(r.fixable) == "boolean", r.code .. " fixable flag")
     end
   end)
 
-  it("flags L006 as an error", function()
+  it("flags L006 (float-eq-comparison) as an error", function()
     for _, r in ipairs(rules.all()) do
       if r.code == "L006" then
         assert.equals("error", r.severity)
       end
     end
   end)
+
+  it("caches per session and reset() clears the cache", function()
+    local first = rules.all()
+    assert.equals(first, rules.all())
+    rules.reset()
+    rules.all() -- repopulates without error
+  end)
 end)
 
-describe("telescope-m1.rules sync with m1-lint (needs m1-lint --rules)", function()
-  it("matches the binary's catalogue exactly (codes, names, fixability)", function()
+describe("telescope-m1.rules runtime catalogue (needs m1-lint --rules)", function()
+  before_each(function()
+    rules.reset()
+  end)
+
+  it("consumes the binary's catalogue: every binary rule appears in all()", function()
     local catalogue = rules.binary_catalogue()
     if not catalogue then
       pending("m1-lint with --rules not on $PATH")
       return
     end
-
-    -- Index the static table by code.
-    local static = {}
+    local by_code = {}
     for _, r in ipairs(rules.all()) do
-      static[r.code] = r
+      by_code[r.code] = r
     end
-
-    -- Every binary rule is represented, with matching name + fixability.
     for code, b in pairs(catalogue) do
-      local s = static[code]
-      assert.is_not_nil(
-        s,
-        "static table is missing "
-          .. code
-          .. " — run :h telescope-m1 and update rules.lua"
-      )
-      assert.equals(b.name, s.name, code .. " name drifted")
-      assert.equals(b.fixable, s.fixable, code .. " fixability drifted")
-    end
-
-    -- And the static table has no rules the binary doesn't know about.
-    for code in pairs(static) do
-      assert.is_not_nil(catalogue[code], "static table has stale rule " .. code)
+      local got = by_code[code]
+      assert.is_not_nil(got, code .. " missing from all()")
+      assert.equals(b.name, got.name, code .. " name")
+      assert.equals(b.fixable or false, got.fixable, code .. " fixability")
+      -- v2 catalogues carry severity/summary; they must flow through verbatim.
+      if b.severity then
+        assert.equals(b.severity, got.severity, code .. " severity")
+      end
+      if b.summary then
+        assert.equals(b.summary, got.summary, code .. " summary")
+      end
     end
   end)
 end)
