@@ -1,23 +1,16 @@
 --- telescope-m1: the m1-lint rule registry.
 ---
---- The registry is built at runtime from `m1-lint --rules --format json`
---- (catalogue v2: code/name/severity/fixable/summary — the same binary the
---- lint diagnostics come from), cached per session. Only presentation
---- concerns live here: the docs URL and the severity→highlight mapping. A
---- static snapshot is kept purely as a fallback for when no m1-lint binary
---- can be resolved; it is NOT load-bearing, no test asserts it is current,
---- and it may go stale without breaking anything (#14).
+--- The catalogue is owned by m1-lint and read at runtime from the bundled
+--- binary (`m1-lint --rules --format json`, schema v2 with severity + summary
+--- — C-Nucifora/m1-lint#118), so a new m1-lint release shows its rules here
+--- with zero changes to this repo. The static table below is only the
+--- fallback for sessions with no m1-lint binary at all; a v1 binary (no
+--- severity/summary fields) gets those synthesized. Results are cached per
+--- session (`M.reset()` clears).
 local M = {}
 
 --- Base documentation URL (the README "Rules" section).
 M.docs_url = "https://github.com/C-Nucifora/m1-lint#rules"
-
----@class M1LintRule
----@field code string
----@field name string
----@field severity string
----@field fixable boolean
----@field summary string
 
 --- Severity → highlight group for the picker. Severities this plugin has
 --- never heard of (a future m1-lint may add some) degrade to DiagnosticInfo
@@ -46,10 +39,16 @@ function M.severity_label(severity)
   return severity:sub(1, 5)
 end
 
---- Fallback snapshot of the catalogue (m1-lint v0.14.0), used only when no
---- m1-lint binary is resolvable. Allowed to go stale.
+---@class M1LintRule
+---@field code string
+---@field name string
+---@field severity string
+---@field fixable boolean
+---@field summary string
+
+--- Fallback only — used when no m1-lint binary can be resolved at all.
 ---@type M1LintRule[]
-local fallback = {
+M.fallback_rules = {
   {
     code = "L001",
     name = "line-too-long",
@@ -221,13 +220,53 @@ local fallback = {
   },
 }
 
---- Parse `m1-lint --rules --format json` output into an M1LintRule[].
---- Understands catalogue v2 (severity + summary); v1 entries (code/name/
---- fixable only, pre-#118 m1-lint) get severity "warning" and a summary
---- synthesised from the rule name, so the picker still renders sensibly.
---- Returns nil if the output is missing, unparseable or has no rules.
----@param output string?
----@return M1LintRule[]?
+--- All rules, in code order: the bundled binary's catalogue when available
+--- (cached per session), else the static fallback.
+---@return M1LintRule[]
+function M.all()
+  if M._cache then
+    return M._cache
+  end
+  local catalogue = M.binary_catalogue()
+  if not catalogue then
+    return M.fallback_rules
+  end
+  local fallback_by_code = {}
+  for _, r in ipairs(M.fallback_rules) do
+    fallback_by_code[r.code] = r
+  end
+  local list = {}
+  for code, r in pairs(catalogue) do
+    -- A v1 binary emits no severity/summary: take them from the fallback
+    -- table for rules it knows, and synthesize for newer ones, so the picker
+    -- renders every rule either way.
+    local fb = fallback_by_code[code] or {}
+    list[#list + 1] = {
+      code = code,
+      name = r.name,
+      severity = r.severity or fb.severity or "warning",
+      fixable = r.fixable or false,
+      summary = r.summary or fb.summary or (r.name and r.name:gsub("%-", " ") or ""),
+    }
+  end
+  table.sort(list, function(a, b)
+    return a.code < b.code
+  end)
+  M._cache = list
+  return list
+end
+
+--- Drop the per-session cache (tests; after a toolchain update).
+function M.reset()
+  M._cache = nil
+end
+
+--- Parse `m1-lint --rules --format json` output into
+--- `{ code = { name, fixable, severity?, summary? } }` (severity/summary are
+--- present from catalogue schema v2). Returns nil if the output is
+--- unparseable (e.g. an older m1-lint without `--rules`).
+---@param output string
+---@return table<string, { name: string, fixable: boolean, severity: string?, summary: string? }>?
 function M.parse_catalogue(output)
   if not output or output == "" then
     return nil
@@ -236,22 +275,18 @@ function M.parse_catalogue(output)
   if not ok or type(data) ~= "table" or type(data.rules) ~= "table" then
     return nil
   end
-  local out = {}
+  local by_code = {}
   for _, r in ipairs(data.rules) do
-    if type(r) == "table" and type(r.code) == "string" and type(r.name) == "string" then
-      out[#out + 1] = {
-        code = r.code,
+    if r.code then
+      by_code[r.code] = {
         name = r.name,
-        severity = type(r.severity) == "string" and r.severity or "warning",
-        fixable = r.fixable == true,
-        summary = type(r.summary) == "string" and r.summary or (r.name:gsub("%-", " ")),
+        fixable = r.fixable,
+        severity = r.severity,
+        summary = r.summary,
       }
     end
   end
-  if #out == 0 then
-    return nil
-  end
-  return out
+  return by_code
 end
 
 --- Resolve the m1-lint command, preferring the binary nvim-m1 manages (which
@@ -274,7 +309,9 @@ local function resolve_m1_lint()
 end
 
 --- Query the m1-lint binary for its rule catalogue, or nil if unavailable.
----@return M1LintRule[]?
+--- Resolves the bundled nvim-m1 binary too (not just `$PATH`), so the rules
+--- sync test runs whenever the plugin is installed.
+---@return table<string, { name: string, fixable: boolean }>?
 function M.binary_catalogue()
   local cmd = resolve_m1_lint()
   if not cmd then
@@ -285,26 +322,6 @@ function M.binary_catalogue()
     return nil
   end
   return M.parse_catalogue(out)
-end
-
---- The per-session registry cache; nil until the first `all()`.
----@type M1LintRule[]?
-local cache = nil
-
---- Drop the cached registry (tests; or after nvim-m1 swaps binaries).
-function M._invalidate()
-  cache = nil
-end
-
---- All rules, in the binary's order, from the resolved m1-lint binary when
---- one is available and the fallback snapshot otherwise. Cached per session.
----@return M1LintRule[]
-function M.all()
-  if cache then
-    return cache
-  end
-  cache = M.binary_catalogue() or fallback
-  return cache
 end
 
 return M
