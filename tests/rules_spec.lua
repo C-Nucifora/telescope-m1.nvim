@@ -88,3 +88,74 @@ describe("telescope-m1.rules runtime catalogue (needs m1-lint --rules)", functio
     end
   end)
 end)
+
+-- Offline catalogue-parsing cases (from #15): deterministic, no binary needed.
+describe("telescope-m1.rules.parse_catalogue", function()
+  local V2 = vim.json.encode({
+    version = 2,
+    rules = {
+      {
+        code = "L006",
+        name = "float-eq-comparison",
+        severity = "error",
+        fixable = false,
+        summary = "float compared with an equality operator",
+      },
+      {
+        code = "L099",
+        name = "future-rule",
+        severity = "deprecation",
+        fixable = true,
+        summary = "a severity this plugin has never heard of",
+      },
+    },
+  })
+  local V1 = vim.json.encode({
+    version = 1,
+    rules = {
+      { code = "L002", name = "trailing-whitespace", fixable = true },
+      { code = "L012", name = "unused-local", fixable = false },
+    },
+  })
+
+  it("parses a v2 catalogue with all fields", function()
+    local parsed = rules.parse_catalogue(V2)
+    assert.is_not_nil(parsed)
+    assert.same({
+      name = "float-eq-comparison",
+      severity = "error",
+      fixable = false,
+      summary = "float compared with an equality operator",
+    }, parsed.L006)
+  end)
+
+  it("keeps unknown future severities as-is", function()
+    local parsed = rules.parse_catalogue(V2)
+    assert.equals("deprecation", parsed.L099.severity)
+    -- And the picker presentation degrades instead of erroring.
+    assert.equals("DiagnosticInfo", rules.severity_hl("deprecation"))
+    assert.equals("depre", rules.severity_label("deprecation"))
+  end)
+
+  it("parses a v1 catalogue (no severity/summary fields)", function()
+    local parsed = rules.parse_catalogue(V1)
+    assert.is_not_nil(parsed)
+    assert.equals("trailing-whitespace", parsed.L002.name)
+    assert.is_nil(parsed.L002.severity, "v1 carries no severity; all() backfills")
+  end)
+
+  it("returns nil for garbage", function()
+    assert.is_nil(rules.parse_catalogue(nil))
+    assert.is_nil(rules.parse_catalogue(""))
+    assert.is_nil(rules.parse_catalogue("not json"))
+    assert.is_nil(rules.parse_catalogue("{}"))
+  end)
+
+  it("maps known severities to their highlight groups and labels", function()
+    assert.equals("DiagnosticError", rules.severity_hl("error"))
+    assert.equals("DiagnosticWarn", rules.severity_hl("warning"))
+    assert.equals("error", rules.severity_label("error"))
+    assert.equals("warn", rules.severity_label("warning"))
+    assert.equals("?", rules.severity_label(nil))
+  end)
+end)

@@ -12,10 +12,37 @@ local M = {}
 --- Base documentation URL (the README "Rules" section).
 M.docs_url = "https://github.com/C-Nucifora/m1-lint#rules"
 
+--- Severity → highlight group for the picker. Severities this plugin has
+--- never heard of (a future m1-lint may add some) degrade to DiagnosticInfo
+--- rather than erroring.
+local severity_hl = {
+  error = "DiagnosticError",
+  warning = "DiagnosticWarn",
+}
+
+---@param severity string?
+---@return string highlight group
+function M.severity_hl(severity)
+  return severity_hl[severity] or "DiagnosticInfo"
+end
+
+--- Compact severity label for the picker's fixed-width column.
+---@param severity string?
+---@return string
+function M.severity_label(severity)
+  if type(severity) ~= "string" or severity == "" then
+    return "?"
+  end
+  if severity == "warning" then
+    return "warn"
+  end
+  return severity:sub(1, 5)
+end
+
 ---@class M1LintRule
 ---@field code string
 ---@field name string
----@field severity "error"|"warning"
+---@field severity string
 ---@field fixable boolean
 ---@field summary string
 
