@@ -22,8 +22,8 @@ local function make_entry(displayer)
           { rule.code, "TelescopeResultsNumber" },
           { rule.name, "TelescopeResultsIdentifier" },
           {
-            rule.severity == "error" and "error" or "warn",
-            rule.severity == "error" and "DiagnosticError" or "DiagnosticWarn",
+            rules.severity_label(rule.severity),
+            rules.severity_hl(rule.severity),
           },
           { rule.fixable and "fix" or "", "TelescopeResultsComment" },
           { rule.summary, "TelescopeResultsComment" },
