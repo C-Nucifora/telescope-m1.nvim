@@ -218,6 +218,20 @@ M.fallback_rules = {
     fixable = false,
     summary = "local declared in a wider scope than its uses need",
   },
+  {
+    code = "L026",
+    name = "top-level-indentation",
+    severity = "warning",
+    fixable = true,
+    summary = "top-level code begins in the first column",
+  },
+  {
+    code = "L027",
+    name = "file-final-blank-line",
+    severity = "warning",
+    fixable = true,
+    summary = "function/method script ends with a blank line",
+  },
 }
 
 --- All rules, in code order: the bundled binary's catalogue when available
