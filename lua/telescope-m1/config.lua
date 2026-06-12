@@ -6,9 +6,14 @@
 local M = {}
 
 ---@class TelescopeM1Config
+---@field icons "ascii"|"nerd"|false  Symbol-kind icon set for picker rows
+--- (#27): "ascii" (default — single ASCII letters, no font requirements),
+--- "nerd" (Nerd Font glyphs), or false to drop the icon column content.
 
 ---@type TelescopeM1Config
-M.options = {}
+M.options = {
+  icons = "ascii",
+}
 
 --- Merge `ext_config` (from telescope's setup) into the defaults.
 ---@param ext_config? table

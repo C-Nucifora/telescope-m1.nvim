@@ -72,50 +72,21 @@ return function(opts)
             if not script or script == "" then
               return
             end
-            -- Reuse nvim-m1's runner via its public command path: set-call-rate
-            -- needs the same plumbing, so go through project.set_call_rate-like
-            -- flow with the rate preselected.
-            local cfg = nvim_m1.config
-            local bin = project.resolve_cmd(cfg)
-            local prj = project.project_file()
-            if not bin or not prj then
+            -- Delegate to nvim-m1's serialized async mutation runner (#26):
+            -- set_call_rate_for owns the queueing, error reporting, and the
+            -- LSP reload notification, so the picker never blocks the UI or
+            -- races a concurrent project mutation. Public as of nvim-m1
+            -- v0.11.0; degrade with a clear message on an older install.
+            if not project.set_call_rate_for then
               vim.notify(
-                "telescope-m1: m1-project or Project.m1prj not found",
-                vim.log.levels.ERROR
+                "telescope-m1: update nvim-m1 (v0.11.0+) to assign call rates from this picker",
+                vim.log.levels.WARN
               )
               return
             end
-            local out = vim.fn.system({
-              bin,
-              "set-call-rate",
-              "--project",
-              prj,
-              "--script",
-              script,
-              "--rate",
-              rate,
+            project.set_call_rate_for(nvim_m1.config, script, rate, {
+              label = script .. " call rate -> " .. entry[1],
             })
-            if vim.v.shell_error ~= 0 then
-              vim.notify(
-                "telescope-m1: set-call-rate failed: " .. out,
-                vim.log.levels.ERROR
-              )
-              return
-            end
-            -- Reuse nvim-m1's public reload notifier rather than duplicating the
-            -- didChangeWatchedFiles shape, so the two plugins stay in sync (#19).
-            -- notify_reload is public as of nvim-m1 v0.10.0 (#74); guard against
-            -- an older installed nvim-m1 so the picker degrades instead of
-            -- calling a nil value.
-            if project.notify_reload then
-              project.notify_reload(prj)
-            else
-              vim.notify(
-                "telescope-m1: update nvim-m1 to v0.10.0+ for live call-rate reload",
-                vim.log.levels.DEBUG
-              )
-            end
-            vim.notify("telescope-m1: " .. script .. " call rate -> " .. entry[1])
           end)
         end)
         return true

@@ -36,7 +36,7 @@ end
 
 --- Open a picker over `entries` (a list from `lsp.symbol_to_entry`).
 ---@param opts table
----@param spec { title: string, entries: table[], hierarchy?: boolean, attach_mappings?: fun(bufnr: integer, map: fun()): boolean }
+---@param spec { title: string, entries: table[], hierarchy?: boolean, previewer?: table, attach_mappings?: fun(bufnr: integer, map: fun()): boolean }
 function M.open(opts, spec)
   local displayer = entry_display.create({
     separator = " ",
@@ -51,7 +51,7 @@ function M.open(opts, spec)
         entry_maker = make_entry(displayer, spec.hierarchy),
       }),
       sorter = conf.generic_sorter(opts),
-      previewer = conf.qflist_previewer(opts),
+      previewer = spec.previewer or conf.qflist_previewer(opts),
       attach_mappings = spec.attach_mappings,
     })
     :find()
@@ -82,6 +82,7 @@ function M.from_lsp(opts, spec)
         title = spec.title,
         entries = entries,
         hierarchy = spec.hierarchy,
+        previewer = spec.previewer,
         attach_mappings = spec.attach_mappings,
       })
     end)

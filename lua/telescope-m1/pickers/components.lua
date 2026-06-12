@@ -67,6 +67,8 @@ return function(opts)
     query = "",
     hierarchy = true,
     transform = m1_lsp.build_hierarchy,
+    -- Detail card instead of raw Project.m1prj XML for component rows (#23).
+    previewer = require("telescope-m1.component_preview").previewer(opts),
     attach_mappings = function(_, map)
       map({ "i", "n" }, "<C-f>", goto_backing_script)
       map({ "i", "n" }, "<C-s>", project_edit("set_security"))
