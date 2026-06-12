@@ -4,6 +4,7 @@
 
 - **Workspace symbols** — fuzzy-search all channels, parameters, enums and functions in the loaded project
 - **Component browser** — browse the project's component tree as an indented hierarchy
+- **Call rates** — browse the project's execution rates and the scripts scheduled at each
 - **Lint rules** — pick an `m1-lint` rule to open its docs, yank its code, or ignore it
 
 The symbol and component pickers are powered by `m1-lsp`'s `workspace/symbol` —
