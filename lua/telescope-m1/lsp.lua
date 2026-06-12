@@ -57,18 +57,37 @@ function M.kind_label(kind)
 end
 
 --- Single-glyph icon for an LSP SymbolKind, for the picker display column.
+--- Two sets (#27): plain ASCII (default, no font requirements) and Nerd Font
+--- glyphs (opt-in via `icons = "nerd"`); `icons = false` blanks the column.
 local KIND_ICON = {
-  Variable = "", -- channel
-  Property = "", -- parameter
-  Constant = "",
-  Function = "",
-  Method = "",
-  Array = "", -- table
-  Namespace = "", -- group
-  Object = "",
+  ascii = {
+    Variable = "C", -- channel
+    Property = "P", -- parameter
+    Constant = "K",
+    Function = "F",
+    Method = "M",
+    Array = "T", -- table
+    Namespace = "G", -- group
+    Object = "O",
+  },
+  nerd = {
+    Variable = "\u{f0c1e}", -- 󰰞 nf-md-alpha_c_box (channel)
+    Property = "\u{f0c46}", -- 󰱆 nf-md-alpha_p_box (parameter)
+    Constant = "\u{eb5d}", -- nf-cod-symbol_constant
+    Function = "\u{f0295}", -- 󰊕 nf-md-function
+    Method = "\u{ea8c}", --  nf-cod-symbol_method
+    Array = "\u{ea8a}", --  nf-cod-symbol_array
+    Namespace = "\u{ea8b}", --  nf-cod-symbol_namespace
+    Object = "\u{eb63}", --  nf-cod-symbol_misc
+  },
 }
 function M.kind_icon(kind)
-  return KIND_ICON[M.kind_label(kind)] or ""
+  local style = require("telescope-m1.config").options.icons
+  if style == false then
+    return ""
+  end
+  local set = KIND_ICON[style] or KIND_ICON.ascii
+  return set[M.kind_label(kind)] or ""
 end
 
 --- Convert an LSP `SymbolInformation` into a telescope-friendly entry value.

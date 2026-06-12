@@ -131,3 +131,50 @@ describe("telescope-m1.lsp.workspace_symbols", function()
     assert.is_truthy(got_err:find("no m1-lsp client", 1, true))
   end)
 end)
+
+describe("telescope-m1.lsp.kind_icon (#27)", function()
+  local config = require("telescope-m1.config")
+  local kinds = {
+    "Variable",
+    "Property",
+    "Constant",
+    "Function",
+    "Method",
+    "Array",
+    "Namespace",
+    "Object",
+  }
+
+  after_each(function()
+    config.options.icons = "ascii"
+  end)
+
+  it("every mapped kind has a non-empty ascii icon by default", function()
+    config.options.icons = "ascii"
+    for _, name in ipairs(kinds) do
+      local icon = m1_lsp.kind_icon(vim.lsp.protocol.SymbolKind[name])
+      assert.is_true(icon ~= "", name .. " must have an icon")
+      assert.is_true(
+        #icon == 1,
+        name .. " ascii icon must be a single byte, got " .. icon
+      )
+    end
+  end)
+
+  it("nerd set is non-empty for every mapped kind", function()
+    config.options.icons = "nerd"
+    for _, name in ipairs(kinds) do
+      assert.is_true(
+        m1_lsp.kind_icon(vim.lsp.protocol.SymbolKind[name]) ~= "",
+        name .. " must have a nerd icon"
+      )
+    end
+  end)
+
+  it("icons = false blanks the column; unknown kinds stay empty", function()
+    config.options.icons = false
+    assert.equals("", m1_lsp.kind_icon(vim.lsp.protocol.SymbolKind.Variable))
+    config.options.icons = "ascii"
+    assert.equals("", m1_lsp.kind_icon(9999))
+  end)
+end)
