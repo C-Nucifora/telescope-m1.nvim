@@ -137,7 +137,7 @@ M.fallback_rules = {
   {
     code = "L014",
     name = "expand-undefined-variable",
-    severity = "error",
+    severity = "warning",
     fixable = false,
     summary = "expand references a variable that is not defined",
   },
@@ -187,7 +187,7 @@ M.fallback_rules = {
     code = "L021",
     name = "one-statement-per-line",
     severity = "warning",
-    fixable = false,
+    fixable = true,
     summary = "write only one statement per line (manual p.65)",
   },
   {
