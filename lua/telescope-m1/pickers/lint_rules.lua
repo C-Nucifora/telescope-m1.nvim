@@ -46,7 +46,7 @@ local function ignore_in_config(code)
   end
   local found =
     vim.fs.find(".m1lint.toml", { upward = true, path = dir, type = "file" })
-  local path = found[1] or (vim.fn.getcwd() .. "/.m1lint.toml")
+  local path = found[1] or (dir .. "/.m1lint.toml")
 
   local lines = vim.fn.filereadable(path) == 1 and vim.fn.readfile(path) or {}
   local new_lines, status = ignore.merge_ignore(lines, code)

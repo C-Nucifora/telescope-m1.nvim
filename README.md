@@ -46,6 +46,9 @@ require("telescope").extensions.m1.workspace_symbols()
 -- Project component browser
 require("telescope").extensions.m1.components()
 
+-- Call-rate browser
+require("telescope").extensions.m1.call_rates()
+
 -- Lint rule picker
 require("telescope").extensions.m1.lint_rules()
 ```

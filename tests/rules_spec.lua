@@ -17,7 +17,7 @@ describe("telescope-m1.rules", function()
       end
       assert.equals(n, #all, "all() mirrors the binary catalogue")
     else
-      assert.is_true(#all >= 24, "fallback table regressed: " .. #all)
+      assert.is_true(#all >= 26, "fallback table regressed: " .. #all)
     end
     local seen = {}
     local prev = ""
