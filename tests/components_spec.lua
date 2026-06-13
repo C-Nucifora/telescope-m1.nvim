@@ -125,7 +125,10 @@ describe("components picker: goto_backing_script filename guard", function()
       value = { kind_label = "Method" },
       filename = "/another/Script.m1scr",
     })
-    assert.is_true(result.edit_called, "edit must be called for Method with valid filename")
+    assert.is_true(
+      result.edit_called,
+      "edit must be called for Method with valid filename"
+    )
     assert.equals("/another/Script.m1scr", result.edit_arg)
   end)
 
