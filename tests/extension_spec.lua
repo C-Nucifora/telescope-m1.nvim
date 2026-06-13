@@ -1,7 +1,7 @@
 describe("telescope m1 extension", function()
   local telescope = require("telescope")
 
-  it("loads and exposes the three pickers", function()
+  it("loads and exposes the four pickers", function()
     telescope.setup({})
     assert.has_no.errors(function()
       telescope.load_extension("m1")
@@ -11,6 +11,7 @@ describe("telescope m1 extension", function()
     assert.is_function(ext.workspace_symbols)
     assert.is_function(ext.components)
     assert.is_function(ext.lint_rules)
+    assert.is_function(ext.call_rates)
   end)
 
   it("forwards setup options into telescope-m1.config", function()
