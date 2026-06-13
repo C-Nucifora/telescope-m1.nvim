@@ -52,6 +52,10 @@ local function goto_backing_script(bufnr)
     )
     return
   end
+  if not entry.filename or entry.filename == "" then
+    vim.notify("telescope-m1: no backing file for this entry", vim.log.levels.WARN)
+    return
+  end
   actions.close(bufnr)
   vim.cmd.edit(entry.filename)
   if entry.lnum then
