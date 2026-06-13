@@ -100,14 +100,16 @@ return function(opts)
       }),
       sorter = conf.generic_sorter(opts),
       attach_mappings = function(prompt_bufnr, map)
-        -- <CR>: open documentation.
+        -- <CR>: open documentation, deep-linked to the selected rule's anchor.
         actions.select_default:replace(function()
+          local entry = action_state.get_selected_entry()
           actions.close(prompt_bufnr)
+          local url = entry and rules.docs_url_for(entry.value) or rules.docs_url
           local ok = pcall(function()
-            vim.ui.open(rules.docs_url)
+            vim.ui.open(url)
           end)
           if not ok then
-            vim.notify("telescope-m1: docs at " .. rules.docs_url, vim.log.levels.INFO)
+            vim.notify("telescope-m1: docs at " .. url, vim.log.levels.INFO)
           end
         end)
         -- <C-y>: yank the code.
