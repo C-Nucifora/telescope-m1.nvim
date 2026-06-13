@@ -1,0 +1,38 @@
+--- Unit tests for telescope-m1.health's pure dependency classifiers (#35).
+local health = require("telescope-m1.health")
+
+describe("telescope-m1.health.lint_status (#35)", function()
+  it("ok with the resolved path when m1-lint is available", function()
+    local level, msg = health.lint_status("/bundled/m1-lint")
+    assert.equals("ok", level)
+    assert.is_truthy(msg:find("/bundled/m1-lint", 1, true))
+    assert.is_truthy(msg:find("live", 1, true))
+  end)
+
+  it("warns and names the static fallback when m1-lint is missing", function()
+    local level, msg = health.lint_status(nil)
+    assert.equals("warn", level)
+    assert.is_truthy(msg:find("not found", 1, true))
+    assert.is_truthy(msg:find("static", 1, true))
+  end)
+end)
+
+describe("telescope-m1.health.extension_status (#35)", function()
+  it("error when telescope.nvim is absent", function()
+    local level, msg = health.extension_status(false, false)
+    assert.equals("error", level)
+    assert.is_truthy(msg:find("telescope.nvim not found", 1, true))
+  end)
+
+  it("warns when telescope is present but the m1 extension is not loaded", function()
+    local level, msg = health.extension_status(true, false)
+    assert.equals("warn", level)
+    assert.is_truthy(msg:find("load_extension", 1, true))
+  end)
+
+  it("ok when the extension is registered", function()
+    local level, msg = health.extension_status(true, true)
+    assert.equals("ok", level)
+    assert.is_truthy(msg:find("registered", 1, true))
+  end)
+end)
