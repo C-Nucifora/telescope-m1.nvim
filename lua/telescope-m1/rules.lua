@@ -9,8 +9,25 @@
 --- session (`M.reset()` clears).
 local M = {}
 
---- Base documentation URL (the README "Rules" section).
+--- Base documentation URL (the README "Rules" section anchor).
 M.docs_url = "https://github.com/C-Nucifora/m1-lint#rules"
+
+--- Deep-link to a specific rule's docs. m1-lint publishes anchor-stable
+--- `### <name> (<CODE>)` headings whose GitHub slug is `<name>-<code-lowercased>`
+--- (e.g. `line-too-long-l001`, m1-lint#148), so build that fragment from the
+--- selected rule. Falls back to the section anchor when the entry lacks a
+--- name/code (e.g. a future/synthesized rule).
+---@param rule { name: string?, code: string? }?
+---@return string
+function M.docs_url_for(rule)
+  if type(rule) == "table" and rule.name and rule.code then
+    return ("https://github.com/C-Nucifora/m1-lint#%s-%s"):format(
+      rule.name,
+      tostring(rule.code):lower()
+    )
+  end
+  return M.docs_url
+end
 
 --- Severity → highlight group for the picker. Severities this plugin has
 --- never heard of (a future m1-lint may add some) degrade to DiagnosticInfo
@@ -337,5 +354,9 @@ function M.binary_catalogue()
   end
   return M.parse_catalogue(out)
 end
+
+--- Public alias so the health check can report the resolved m1-lint path
+--- without duplicating the nvim-m1-aware resolution logic.
+M.resolve_m1_lint = resolve_m1_lint
 
 return M

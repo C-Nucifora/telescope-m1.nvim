@@ -158,4 +158,19 @@ describe("telescope-m1.rules.parse_catalogue", function()
     assert.equals("warn", rules.severity_label("warning"))
     assert.equals("?", rules.severity_label(nil))
   end)
+
+  -- #34: deep-link each rule to its README heading anchor. m1-lint (#148)
+  -- publishes `### <name> (<CODE>)` headings whose GitHub slug is
+  -- `<name>-<code-lowercased>`, so the picker must build that exact fragment.
+  it("docs_url_for deep-links the selected rule's README anchor", function()
+    assert.equals(
+      "https://github.com/C-Nucifora/m1-lint#line-too-long-l001",
+      rules.docs_url_for({ name = "line-too-long", code = "L001" })
+    )
+  end)
+
+  it("docs_url_for falls back to the section anchor without a name/code", function()
+    assert.equals(rules.docs_url, rules.docs_url_for(nil))
+    assert.equals(rules.docs_url, rules.docs_url_for({ code = "L001" }))
+  end)
 end)
