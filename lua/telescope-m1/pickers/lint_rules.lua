@@ -76,8 +76,36 @@ local function ignore_in_config(code)
   end
 end
 
+--- Yank a rule code to the `+` (system) and `"` (unnamed) registers (<C-y>).
+--- Extracted so the unit test drives the real handler instead of a copy.
+---@param entry table?  the selected Telescope entry (`entry.value.code`)
+local function yank_code(entry)
+  if entry then
+    vim.fn.setreg("+", entry.value.code)
+    vim.fn.setreg('"', entry.value.code)
+    vim.notify("telescope-m1: yanked " .. entry.value.code)
+  end
+end
+
+--- The picker is callable — `require("telescope-m1.pickers.lint_rules")(opts)`
+--- still works — but is a table so the private helpers above can be exposed
+--- (underscore-prefixed) for the unit tests to invoke the real source.
+--- `Picker` is forward-declared so `__call` captures it as an upvalue (the
+--- local is not in scope inside its own initialiser).
+local Picker
+Picker = setmetatable({}, {
+  __call = function(_, opts)
+    return Picker.open(opts)
+  end,
+})
+
+-- Private-by-convention handles for the unit tests.
+Picker._make_entry = make_entry
+Picker._ignore_in_config = ignore_in_config
+Picker._yank_code = yank_code
+
 ---@param opts? table
-return function(opts)
+function Picker.open(opts)
   opts = opts or {}
 
   local displayer = entry_display.create({
@@ -114,12 +142,7 @@ return function(opts)
         end)
         -- <C-y>: yank the code.
         map({ "i", "n" }, "<C-y>", function()
-          local entry = action_state.get_selected_entry()
-          if entry then
-            vim.fn.setreg("+", entry.value.code)
-            vim.fn.setreg('"', entry.value.code)
-            vim.notify("telescope-m1: yanked " .. entry.value.code)
-          end
+          yank_code(action_state.get_selected_entry())
         end)
         -- <C-i>: ignore in .m1lint.toml.
         map({ "i", "n" }, "<C-i>", function(pbuf)
@@ -134,3 +157,5 @@ return function(opts)
     })
     :find()
 end
+
+return Picker

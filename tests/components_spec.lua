@@ -5,15 +5,20 @@
 ---   * goto_backing_script guard: skips vim.cmd.edit when filename is empty
 ---   * goto_backing_script guard: calls vim.cmd.edit for a valid filename
 ---
---- Private function testing approach: we reproduce the handler logic here with
---- injectable stubs, exactly as lint_rules_spec reproduces ignore_in_config.
+--- Private function testing approach: we drive the REAL handler (exposed as
+--- components._goto_backing_script) with injectable stubs, exactly as
+--- lint_rules_spec drives the real ignore_in_config.
 
 -- ─── helpers ───────────────────────────────────────────────────────────────
 
---- Re-implement goto_backing_script logic verbatim from components.lua so that
---- we test the real decision tree in isolation, with controlled inputs.
---- This is kept in sync with the source by design; a drift will surface via
---- the source-contract test below.
+local components = require("telescope-m1.pickers.components")
+local action_state = require("telescope.actions.state")
+local actions = require("telescope.actions")
+
+--- Run the REAL goto_backing_script from components.lua with `entry` as the
+--- selected Telescope entry, capturing the outward effects. Stubs
+--- action_state.get_selected_entry (the handler reads the selection itself),
+--- actions.close, vim.cmd.edit and vim.notify so nothing touches a live UI.
 ---
 --- Returns a table of observations:
 ---   edit_called   boolean  – was vim.cmd.edit invoked?
@@ -26,6 +31,8 @@ local function run_goto_backing_script(entry)
 
   local orig_cmd_edit = vim.cmd.edit
   local orig_notify = vim.notify
+  local orig_get_selected = action_state.get_selected_entry
+  local orig_close = actions.close
 
   vim.cmd.edit = function(arg)
     edit_called = true
@@ -34,32 +41,17 @@ local function run_goto_backing_script(entry)
   vim.notify = function(msg, level)
     notifications[#notifications + 1] = { msg = msg, level = level }
   end
-
-  -- Reproduce goto_backing_script from components.lua exactly, including the
-  -- filename guard introduced by this fix.
-  local function handler()
-    if not entry then
-      return
-    end
-    local kind = entry.value and entry.value.kind_label
-    if kind ~= "Function" and kind ~= "Method" then
-      vim.notify(
-        "telescope-m1: not a script-backed entry (" .. (kind or "?") .. ")",
-        vim.log.levels.INFO
-      )
-      return
-    end
-    if not entry.filename or entry.filename == "" then
-      vim.notify("telescope-m1: no backing file for this entry", vim.log.levels.WARN)
-      return
-    end
-    vim.cmd.edit(entry.filename)
+  action_state.get_selected_entry = function()
+    return entry
   end
+  actions.close = function() end
 
-  handler()
+  components._goto_backing_script(0) -- bufnr is only forwarded to actions.close
 
   vim.cmd.edit = orig_cmd_edit
   vim.notify = orig_notify
+  action_state.get_selected_entry = orig_get_selected
+  actions.close = orig_close
 
   return {
     edit_called = edit_called,

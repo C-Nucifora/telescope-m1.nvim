@@ -8,16 +8,13 @@
 ---   * set_call_rate_for absent (old nvim-m1): a WARN notify, no error thrown
 
 -- ─── rate_value() ──────────────────────────────────────────────────────────
--- rate_value is private to the picker module.  We extract and test the exact
--- expression the picker uses so any drift in the source breaks this test.
+-- rate_value is private-by-convention to the picker module, exposed for tests
+-- as call_rates._rate_value. We call the REAL function so any drift in the
+-- source breaks this test.
+local call_rates = require("telescope-m1.pickers.call_rates")
+local rate_value = call_rates._rate_value
 
 describe("call_rates picker: rate_value logic", function()
-  -- Inline the expression verbatim from the picker source so a refactor is
-  -- caught immediately.
-  local function rate_value(label)
-    return label:lower():match("startup") and "startup" or (label:gsub("Hz$", ""))
-  end
-
   it('"startup" (any case) → "startup"', function()
     assert.equals("startup", rate_value("startup"))
     assert.equals("startup", rate_value("Startup"))
@@ -67,10 +64,6 @@ describe("call_rates picker: entry[1] array access", function()
   end)
 
   it("rate_value applied to entry[1] gives the expected hz string", function()
-    local function rate_value(label)
-      return label:lower():match("startup") and "startup" or (label:gsub("Hz$", ""))
-    end
-
     local cases = {
       { entry = { "100Hz" }, want = "100" },
       { entry = { "1000Hz" }, want = "1000" },
