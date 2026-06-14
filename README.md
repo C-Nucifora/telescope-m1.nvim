@@ -5,7 +5,7 @@
 - **Workspace symbols** — fuzzy-search all channels, parameters, enums and functions in the loaded project
 - **Component browser** — browse the project's component tree as an indented hierarchy
 - **Call rates** — browse the project's execution rates and the scripts scheduled at each
-- **Lint rules** — pick an `m1-lint` rule to open its docs, yank its code, or ignore it
+- **Lint rules** — preview a rule's full `m1-lint --explain` rationale in-editor, open its docs, yank its code, or ignore it
 
 The symbol and component pickers are powered by `m1-lsp`'s `workspace/symbol` —
 the component browser presents the *same* data the toolchain builds from
@@ -71,6 +71,7 @@ Or via command palette:
 | components | `<C-r>` / `<C-d>` | rename / delete the component (via nvim-m1 + m1-project; delete confirms first) |
 | call_rates | `<CR>` | browse the scripts scheduled at the picked rate |
 | call_rates | `<C-a>` | assign a script to the picked rate |
+| lint_rules | preview | the rule's full `m1-lint --explain` rationale (no browser needed) |
 | lint_rules | `<CR>` | open the rule's documentation |
 | lint_rules | `<C-y>` | yank the rule code (e.g. `L004`) |
 | lint_rules | `<C-i>` | append the code to the project's `.m1lint.toml` ignore list |
@@ -85,6 +86,9 @@ owns, so new M1 features show up here without code changes:
 - **The lint-rule catalogue** is sourced from `m1-lint`: a test runs
   `m1-lint --rules --format json` and fails if `lua/telescope-m1/rules.lua`
   drifts from the binary (codes, names, fixability).
+- **The rule-rationale preview** is sourced from `m1-lint --explain <code>` at
+  runtime, so the in-editor "why" stays in lock-step with the binary too; with
+  no `m1-lint` resolvable it degrades to the static one-line summary.
 - **The LSP client name** is read from `nvim-m1` when present, so the two plugins
   can never disagree about which client to talk to.
 

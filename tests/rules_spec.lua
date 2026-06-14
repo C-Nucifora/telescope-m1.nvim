@@ -61,6 +61,21 @@ describe("telescope-m1.rules", function()
     assert.is_true(#l028.summary > 0, "L028 has a summary")
   end)
 
+  -- L029 indentation-depth shipped with m1-lint v0.21.0; like L028 it must be
+  -- in the offline fallback so the picker still offers it without a binary.
+  it("fallback table includes L029 (indentation-depth, m1-lint v0.21.0)", function()
+    local by_code = {}
+    for _, r in ipairs(rules.fallback_rules) do
+      by_code[r.code] = r
+    end
+    local l029 = by_code.L029
+    assert.is_not_nil(l029, "fallback table missing L029 (indentation-depth)")
+    assert.equals("indentation-depth", l029.name)
+    assert.equals("warning", l029.severity)
+    assert.equals(false, l029.fixable)
+    assert.is_true(#l029.summary > 0, "L029 has a summary")
+  end)
+
   it("flags L006 (float-eq-comparison) as an error", function()
     for _, r in ipairs(rules.all()) do
       if r.code == "L006" then

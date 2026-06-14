@@ -1,5 +1,6 @@
 --- telescope-m1: m1-lint rule picker.
 ---
+--- Preview the rule's `m1-lint --explain` rationale in-editor (#44)
 --- <CR>  open the rule's documentation in a browser
 --- <C-y> yank the rule code (e.g. "L004") to the clipboard
 --- <C-i> append the code to the project's .m1lint.toml `ignore` list
@@ -11,6 +12,7 @@ local action_state = require("telescope.actions.state")
 local entry_display = require("telescope.pickers.entry_display")
 local rules = require("telescope-m1.rules")
 local ignore = require("telescope-m1.ignore")
+local explain_preview = require("telescope-m1.explain_preview")
 
 local function make_entry(displayer)
   return function(rule)
@@ -127,6 +129,9 @@ function Picker.open(opts)
         entry_maker = make_entry(displayer),
       }),
       sorter = conf.generic_sorter(opts),
+      -- In-editor rationale (`m1-lint --explain`) so headless/SSH users who
+      -- can't open the <CR> browser docs still get the full "why" (#44).
+      previewer = explain_preview.previewer(opts),
       attach_mappings = function(prompt_bufnr, map)
         -- <CR>: open documentation, deep-linked to the selected rule's anchor.
         actions.select_default:replace(function()

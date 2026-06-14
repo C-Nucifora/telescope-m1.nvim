@@ -256,6 +256,13 @@ M.fallback_rules = {
     fixable = false,
     summary = "braces follow the configured style (default Allman, manual p.65)",
   },
+  {
+    code = "L029",
+    name = "indentation-depth",
+    severity = "warning",
+    fixable = false,
+    summary = "nested block is not indented one level per enclosing block (manual p.65)",
+  },
 }
 
 --- All rules, in code order: the bundled binary's catalogue when available
