@@ -7,6 +7,7 @@
 ---   * make_entry: filename / lnum / col are preserved 1-indexed
 ---   * make_entry: kind_label absent falls back to empty string in ordinal
 local m1_lsp = require("telescope-m1.lsp")
+local symbol_picker = require("telescope-m1.symbol_picker")
 
 -- ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -24,39 +25,18 @@ local function sample_sym(overrides)
   }, overrides or {})
 end
 
---- Reproduce the private make_entry closure from symbol_picker.lua verbatim,
---- accepting an injectable displayer so we can intercept the display arguments
---- without a live Neovim window.
+--- Drive the REAL `make_entry` closure from symbol_picker.lua (exposed as
+--- `symbol_picker._make_entry`), feeding it an injectable displayer so we can
+--- intercept the display arguments without a live Neovim window. A regression
+--- in the source now fails this spec instead of passing against a copy.
 ---
 --- `hierarchy` mirrors the boolean flag that the picker passes: true = indent
 --- by depth, false = flat list.
 local function build_entry(sym, hierarchy, displayer)
-  -- Replicate the make_entry closure exactly as it appears in symbol_picker.lua.
-  local function make_entry(disp, hier)
-    return function(s)
-      return {
-        value = s,
-        ordinal = s.name .. " " .. (s.kind_label or ""),
-        display = function(e)
-          local sv = e.value
-          local indent = hier and string.rep("  ", sv.depth or 0) or ""
-          return disp({
-            { m1_lsp.kind_icon(sv.kind), "TelescopeResultsComment" },
-            { indent .. sv.name, "TelescopeResultsIdentifier" },
-            { sv.kind_label or "", "TelescopeResultsComment" },
-          })
-        end,
-        filename = s.filename,
-        lnum = s.lnum,
-        col = s.col,
-      }
-    end
-  end
-
   local default_disp = displayer or function(args)
     return args, {}
   end
-  return make_entry(default_disp, hierarchy)(sym)
+  return symbol_picker._make_entry(default_disp, hierarchy)(sym)
 end
 
 -- ─── ordinal ────────────────────────────────────────────────────────────────

@@ -15,8 +15,23 @@ local function rate_value(label)
   return label:lower():match("startup") and "startup" or (label:gsub("Hz$", ""))
 end
 
+--- The picker is callable — `require("telescope-m1.pickers.call_rates")(opts)`
+--- still works — but is a table so `rate_value` can be exposed (underscore-
+--- prefixed) for the unit tests to invoke the real source.
+--- `Picker` is forward-declared so `__call` captures it as an upvalue (the
+--- local is not in scope inside its own initialiser).
+local Picker
+Picker = setmetatable({}, {
+  __call = function(_, opts)
+    return Picker.open(opts)
+  end,
+})
+
+-- Private-by-convention handle for the unit tests.
+Picker._rate_value = rate_value
+
 ---@param opts? table
-return function(opts)
+function Picker.open(opts)
   opts = opts or {}
   local ok, nvim_m1 = pcall(require, "nvim-m1")
   if not ok then
@@ -94,3 +109,5 @@ return function(opts)
     })
     :find()
 end
+
+return Picker

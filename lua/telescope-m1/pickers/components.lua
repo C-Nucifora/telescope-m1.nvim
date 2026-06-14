@@ -44,7 +44,7 @@ local function goto_backing_script(bufnr)
   if not entry then
     return
   end
-  local kind = entry.value.kind_label
+  local kind = entry.value and entry.value.kind_label
   if kind ~= "Function" and kind ~= "Method" then
     vim.notify(
       "telescope-m1: not a script-backed entry (" .. (kind or "?") .. ")",
@@ -63,8 +63,23 @@ local function goto_backing_script(bufnr)
   end
 end
 
+--- The picker is callable — `require("telescope-m1.pickers.components")(opts)`
+--- still works — but is a table so `goto_backing_script` can be exposed
+--- (underscore-prefixed) for the unit tests to invoke the real source.
+--- `Picker` is forward-declared so `__call` captures it as an upvalue (the
+--- local is not in scope inside its own initialiser).
+local Picker
+Picker = setmetatable({}, {
+  __call = function(_, opts)
+    return Picker.open(opts)
+  end,
+})
+
+-- Private-by-convention handle for the unit tests.
+Picker._goto_backing_script = goto_backing_script
+
 ---@param opts? table
-return function(opts)
+function Picker.open(opts)
   opts = opts or {}
   symbol_picker.from_lsp(opts, {
     title = "M1 Components",
@@ -84,3 +99,5 @@ return function(opts)
     end,
   })
 end
+
+return Picker

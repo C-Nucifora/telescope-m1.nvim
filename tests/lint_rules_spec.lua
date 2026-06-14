@@ -8,7 +8,7 @@
 ---   * yank handler: setreg receives the correct code (tested via the
 ---     action_state mock pattern used by the existing specs)
 local rules = require("telescope-m1.rules")
-local ignore = require("telescope-m1.ignore")
+local lint_rules = require("telescope-m1.pickers.lint_rules")
 
 -- ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -25,9 +25,10 @@ end
 -- ─── entry_maker ───────────────────────────────────────────────────────────
 
 describe("lint_rules picker: make_entry", function()
-  -- We exercise make_entry by re-creating the same displayer the picker
-  -- creates at runtime and calling entry_maker directly — exactly as
-  -- component_preview_spec exercises render_card directly.
+  -- We exercise the REAL make_entry (exposed as lint_rules._make_entry) by
+  -- building the same displayer the picker creates at runtime and calling the
+  -- entry_maker it returns — exactly as component_preview_spec exercises
+  -- render_card directly. A regression in the source now fails this spec.
 
   local entry_display = require("telescope.pickers.entry_display")
 
@@ -44,32 +45,10 @@ describe("lint_rules picker: make_entry", function()
     })
   end
 
-  -- Re-expose the private make_entry via a loader shim: source the file and
-  -- capture the returned picker factory, which is a closure over make_entry.
-  -- Because the function is not exported we test its contract indirectly
-  -- through the table the entry_maker closure returns.
-  local function build_entry(rule)
-    local displayer = make_displayer()
-    -- Replicate the exact closure from lint_rules.lua.
-    local function entry_maker(r)
-      return {
-        value = r,
-        ordinal = r.code .. " " .. r.name,
-        display = function()
-          return displayer({
-            { r.code, "TelescopeResultsNumber" },
-            { r.name, "TelescopeResultsIdentifier" },
-            {
-              rules.severity_label(r.severity),
-              rules.severity_hl(r.severity),
-            },
-            { r.fixable and "fix" or "", "TelescopeResultsComment" },
-            { r.summary, "TelescopeResultsComment" },
-          })
-        end,
-      }
-    end
-    return entry_maker(rule)
+  -- Drive the real entry_maker. Pass an optional displayer override so the
+  -- "display args" tests can intercept the displayer call without a window.
+  local function build_entry(rule, displayer)
+    return lint_rules._make_entry(displayer or make_displayer())(rule)
   end
 
   it("ordinal is 'code name'", function()
@@ -106,34 +85,16 @@ describe("lint_rules picker: make_entry", function()
 
   it("display args include severity label and highlight from rules module", function()
     -- Instead of invoking the displayer (which needs a live window), verify
-    -- that the arguments passed to it are assembled correctly by intercepting
-    -- the displayer call.
+    -- that the arguments the REAL display function passes to it are assembled
+    -- correctly by intercepting the displayer call.
     local captured_args
     local function fake_displayer(args)
       captured_args = args
       return "", {}
     end
     local rule = sample_rule({ severity = "error", fixable = false })
-    -- Build the display closure with the fake displayer.
-    local function entry_maker_with_fake_disp(r)
-      return {
-        value = r,
-        ordinal = r.code .. " " .. r.name,
-        display = function()
-          return fake_displayer({
-            { r.code, "TelescopeResultsNumber" },
-            { r.name, "TelescopeResultsIdentifier" },
-            {
-              rules.severity_label(r.severity),
-              rules.severity_hl(r.severity),
-            },
-            { r.fixable and "fix" or "", "TelescopeResultsComment" },
-            { r.summary, "TelescopeResultsComment" },
-          })
-        end,
-      }
-    end
-    entry_maker_with_fake_disp(rule).display()
+    local entry = build_entry(rule, fake_displayer)
+    entry.display()
     assert.is_not_nil(captured_args)
     -- Slot 0 is code.
     assert.equals("L006", captured_args[1][1])
@@ -153,25 +114,8 @@ describe("lint_rules picker: make_entry", function()
       return "", {}
     end
     local rule = sample_rule({ code = "L002", severity = "warning", fixable = true })
-    local function entry_maker_with_fake_disp(r)
-      return {
-        value = r,
-        ordinal = r.code .. " " .. r.name,
-        display = function()
-          return fake_displayer({
-            { r.code, "TelescopeResultsNumber" },
-            { r.name, "TelescopeResultsIdentifier" },
-            {
-              rules.severity_label(r.severity),
-              rules.severity_hl(r.severity),
-            },
-            { r.fixable and "fix" or "", "TelescopeResultsComment" },
-            { r.summary, "TelescopeResultsComment" },
-          })
-        end,
-      }
-    end
-    entry_maker_with_fake_disp(rule).display()
+    local entry = build_entry(rule, fake_displayer)
+    entry.display()
     assert.equals("fix", captured_args[4][1])
   end)
 
@@ -193,14 +137,11 @@ end)
 -- ─── ignore_in_config ──────────────────────────────────────────────────────
 
 describe("lint_rules picker: ignore_in_config", function()
-  -- ignore_in_config is a private function inside the picker module.  We
-  -- test its full behaviour by reproducing the logic here (same approach as
-  -- component_preview_spec which directly calls preview.render_card), plus
-  -- by stubbing vim.fn / vim.notify / vim.fs to keep it hermetic.
-  --
-  -- We extract the testable logic into a small adapter that we can call
-  -- with controlled filesystem state, and we verify the outward
-  -- effects (writefile calls, notify messages).
+  -- ignore_in_config is private-by-convention inside the picker module, exposed
+  -- for tests as lint_rules._ignore_in_config. We drive the REAL function with
+  -- controlled filesystem state (same approach as component_preview_spec, which
+  -- directly calls preview.render_card) and verify the outward effects
+  -- (writefile calls, notify messages).
 
   -- Capture and restore stubs in after_each.
   local orig_getcwd
@@ -231,15 +172,15 @@ describe("lint_rules picker: ignore_in_config", function()
     vim.notify = orig_notify
   end)
 
-  -- A pure re-implementation of the picker's ignore_in_config that accepts
-  -- the fs stubs.  This lets us test the decision tree without touching the
-  -- real filesystem.
+  -- Stub the filesystem + notify so the REAL ignore_in_config (exposed as
+  -- lint_rules._ignore_in_config) runs its decision tree without touching the
+  -- disk, and capture the outward effects (writefile / notify). The function
+  -- under test is the production source — no copy.
   local function run_ignore_in_config(code, existing_lines, found_path)
     local written_lines
     local written_path
     local notifications = {}
 
-    -- stubs
     vim.fn.getcwd = function()
       return "/fake/cwd"
     end
@@ -249,7 +190,7 @@ describe("lint_rules picker: ignore_in_config", function()
     vim.fs.find = function()
       return found_path and { found_path } or {}
     end
-    vim.fn.filereadable = function(p)
+    vim.fn.filereadable = function()
       return (existing_lines ~= nil) and 1 or 0
     end
     vim.fn.readfile = function()
@@ -264,43 +205,7 @@ describe("lint_rules picker: ignore_in_config", function()
       notifications[#notifications + 1] = { msg = msg, level = level }
     end
 
-    -- Re-implement ignore_in_config verbatim from the picker source so that
-    -- we test the real decision tree (not a simplification of it).
-    local dir = vim.fn.getcwd()
-    local buf = vim.api.nvim_buf_get_name(0)
-    if buf ~= "" then
-      dir = vim.fs.dirname(buf)
-    end
-    local found =
-      vim.fs.find(".m1lint.toml", { upward = true, path = dir, type = "file" })
-    local path = found[1] or (dir .. "/.m1lint.toml")
-
-    local lines = vim.fn.filereadable(path) == 1 and vim.fn.readfile(path) or {}
-    local new_lines, status = ignore.merge_ignore(lines, code)
-
-    if status == "already_ignored" then
-      vim.notify(
-        "telescope-m1: " .. code .. " already ignored in " .. path,
-        vim.log.levels.INFO
-      )
-      return { written_lines = nil, written_path = nil, notifications = notifications }
-    end
-
-    vim.fn.writefile(new_lines, path)
-
-    if status == "fallback" then
-      vim.notify(
-        "telescope-m1: "
-          .. path
-          .. " has an `ignore` key this tool can't safely edit (multi-line array); "
-          .. 'appended a second `ignore = ["'
-          .. code
-          .. '"]` — please merge it by hand to avoid a duplicate key.',
-        vim.log.levels.WARN
-      )
-    else
-      vim.notify("telescope-m1: added " .. code .. " to ignore in " .. path)
-    end
+    lint_rules._ignore_in_config(code)
 
     return {
       written_lines = written_lines,
@@ -369,8 +274,9 @@ end)
 -- ─── yank handler (setreg contract) ────────────────────────────────────────
 
 describe("lint_rules picker: yank handler registers", function()
-  -- The <C-y> handler calls vim.fn.setreg("+", entry.value.code) and the
-  -- unnamed register.  We verify both registers receive the correct code.
+  -- The <C-y> handler (the REAL lint_rules._yank_code) calls
+  -- vim.fn.setreg("+", entry.value.code) and the unnamed register.  We verify
+  -- both registers receive the correct code.
 
   it("setreg receives the rule code for both + and default registers", function()
     local regs = {}
@@ -382,12 +288,7 @@ describe("lint_rules picker: yank handler registers", function()
     end
     vim.notify = function() end
 
-    -- Replicate the handler from the picker source.
-    local entry = { value = { code = "L006" } }
-    -- Handler body (verbatim copy from the picker):
-    vim.fn.setreg("+", entry.value.code)
-    vim.fn.setreg('"', entry.value.code)
-    vim.notify("telescope-m1: yanked " .. entry.value.code)
+    lint_rules._yank_code({ value = { code = "L006" } })
 
     vim.fn.setreg = orig_setreg
     vim.notify = orig_notify
@@ -400,21 +301,36 @@ describe("lint_rules picker: yank handler registers", function()
     local yanked = {}
     local orig_setreg = vim.fn.setreg
     local orig_notify = vim.notify
-    vim.fn.setreg = function(reg, val)
+    vim.fn.setreg = function(_, val)
       yanked[#yanked + 1] = val
     end
     vim.notify = function() end
 
     local codes = { "L001", "L006", "L027" }
     for _, code in ipairs(codes) do
-      local entry = { value = { code = code } }
-      vim.fn.setreg("+", entry.value.code)
-      vim.fn.setreg('"', entry.value.code)
+      lint_rules._yank_code({ value = { code = code } })
     end
 
     vim.fn.setreg = orig_setreg
     vim.notify = orig_notify
 
     assert.same({ "L001", "L001", "L006", "L006", "L027", "L027" }, yanked)
+  end)
+
+  it("is a no-op when no entry is selected (nil entry)", function()
+    local called = false
+    local orig_setreg = vim.fn.setreg
+    local orig_notify = vim.notify
+    vim.fn.setreg = function()
+      called = true
+    end
+    vim.notify = function() end
+
+    lint_rules._yank_code(nil)
+
+    vim.fn.setreg = orig_setreg
+    vim.notify = orig_notify
+
+    assert.is_false(called, "setreg must not be called for a nil entry")
   end)
 end)

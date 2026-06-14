@@ -12,6 +12,11 @@ local m1_lsp = require("telescope-m1.lsp")
 
 local M = {}
 
+--- Build the Telescope `entry_maker` closure for a workspace symbol.
+---
+--- Exposed as `M._make_entry` so the tests can exercise the *real* closure
+--- (with an injected displayer) instead of re-implementing it; the leading
+--- underscore marks it private-by-convention.
 --- @param hierarchy boolean  Indent by `entry.depth` (component browser) or not.
 local function make_entry(displayer, hierarchy)
   return function(sym)
@@ -88,5 +93,8 @@ function M.from_lsp(opts, spec)
     end)
   end)
 end
+
+-- Private-by-convention handle for the unit tests (see make_entry above).
+M._make_entry = make_entry
 
 return M
