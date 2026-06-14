@@ -17,7 +17,7 @@ describe("telescope-m1.rules", function()
       end
       assert.equals(n, #all, "all() mirrors the binary catalogue")
     else
-      assert.is_true(#all >= 26, "fallback table regressed: " .. #all)
+      assert.is_true(#all >= 27, "fallback table regressed: " .. #all)
     end
     local seen = {}
     local prev = ""
@@ -40,6 +40,25 @@ describe("telescope-m1.rules", function()
       assert.is_true(#r.summary > 0, r.code .. " has a summary")
       assert.is_true(type(r.fixable) == "boolean", r.code .. " fixable flag")
     end
+  end)
+
+  -- The fallback table is the catalogue when no m1-lint binary can be
+  -- resolved at all. It must keep pace with the released m1-lint, so a rule
+  -- that ships default-on (e.g. L028 brace-style, m1-lint v0.20.0) is still
+  -- offered by the lint_rules picker offline. Asserting the fallback table
+  -- directly (not all(), which is binary-driven when the binary is present)
+  -- catches the drift even on a runner that has m1-lint installed.
+  it("fallback table includes L028 (brace-style, default-on)", function()
+    local by_code = {}
+    for _, r in ipairs(rules.fallback_rules) do
+      by_code[r.code] = r
+    end
+    local l028 = by_code.L028
+    assert.is_not_nil(l028, "fallback table missing L028 (brace-style)")
+    assert.equals("brace-style", l028.name)
+    assert.equals("warning", l028.severity)
+    assert.equals(false, l028.fixable)
+    assert.is_true(#l028.summary > 0, "L028 has a summary")
   end)
 
   it("flags L006 (float-eq-comparison) as an error", function()
@@ -85,6 +104,27 @@ describe("telescope-m1.rules runtime catalogue (needs m1-lint --rules)", functio
       if b.summary then
         assert.equals(b.summary, got.summary, code .. " summary")
       end
+    end
+  end)
+
+  -- The fallback table (used offline) must itself cover every binary rule, not
+  -- just all() (which is binary-driven when the binary is present and so would
+  -- mask a stale fallback). This is the guard that prevents a future m1-lint
+  -- rule from silently leaving M.fallback_rules behind.
+  it("fallback table covers every rule the binary defines", function()
+    local catalogue = rules.binary_catalogue()
+    if not catalogue then
+      pending("m1-lint with --rules not on $PATH")
+      return
+    end
+    local in_fallback = {}
+    for _, r in ipairs(rules.fallback_rules) do
+      in_fallback[r.code] = r
+    end
+    for code, b in pairs(catalogue) do
+      local fb = in_fallback[code]
+      assert.is_not_nil(fb, code .. " missing from M.fallback_rules")
+      assert.equals(b.name, fb.name, code .. " fallback name")
     end
   end)
 end)
