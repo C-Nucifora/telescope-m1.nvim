@@ -249,6 +249,13 @@ M.fallback_rules = {
     fixable = true,
     summary = "function/method script ends with a blank line",
   },
+  {
+    code = "L028",
+    name = "brace-style",
+    severity = "warning",
+    fixable = false,
+    summary = "braces follow the configured style (default Allman, manual p.65)",
+  },
 }
 
 --- All rules, in code order: the bundled binary's catalogue when available
