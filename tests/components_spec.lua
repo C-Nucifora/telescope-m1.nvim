@@ -134,6 +134,167 @@ describe("components picker: goto_backing_script filename guard", function()
   end)
 end)
 
+-- ─── project_edit / select_edit: component attribute editors (#45) ──────────
+--
+-- We drive the REAL project_edit / select_edit handlers (exposed as
+-- components._project_edit / ._select_edit) with stubbed action_state,
+-- actions.close, the nvim-m1 project module and vim.ui.select, capturing which
+-- nvim-m1.project function is dispatched with which (cfg, component) args.
+
+--- Run a components handler with `entry` selected and `project` standing in for
+--- `require("nvim-m1.project")`. Returns the captured dispatch + notifications.
+---@param handler fun(bufnr: integer)
+---@param entry table?
+---@param project table  fake nvim-m1.project (function name -> fn)
+---@param ui_choice? string|nil  what vim.ui.select picks (for select_edit)
+local function run_edit(handler, entry, project, ui_choice)
+  local dispatched = {} -- list of { fn = name, cfg = ..., component = ... }
+  local notifications = {}
+  local offered_items = nil -- labels passed to vim.ui.select
+
+  local orig_get_selected = action_state.get_selected_entry
+  local orig_close = actions.close
+  local orig_notify = vim.notify
+  local orig_ui_select = vim.ui.select
+  local orig_require = _G.require
+
+  -- Wrap each fake project fn so we record the dispatch.
+  local wrapped = {}
+  for name, fn in pairs(project) do
+    wrapped[name] = function(cfg, component)
+      dispatched[#dispatched + 1] = { fn = name, cfg = cfg, component = component }
+      if fn then
+        fn(cfg, component)
+      end
+    end
+  end
+
+  action_state.get_selected_entry = function()
+    return entry
+  end
+  actions.close = function() end
+  vim.notify = function(msg, level)
+    notifications[#notifications + 1] = { msg = msg, level = level }
+  end
+  vim.ui.select = function(items, _opts, on_choice)
+    -- record the offered labels so the menu can be asserted
+    offered_items = items
+    on_choice(ui_choice)
+  end
+  -- Intercept require so the handler's `require("nvim-m1")` /
+  -- `require("nvim-m1.project")` resolve to our fakes, untouched for the rest.
+  _G.require = function(mod)
+    if mod == "nvim-m1" then
+      return { config = { project_path = "/fake" } }
+    elseif mod == "nvim-m1.project" then
+      return wrapped
+    end
+    return orig_require(mod)
+  end
+
+  local ok, err = pcall(handler, 0)
+
+  action_state.get_selected_entry = orig_get_selected
+  actions.close = orig_close
+  vim.notify = orig_notify
+  vim.ui.select = orig_ui_select
+  _G.require = orig_require
+
+  assert.is_true(ok, "handler errored: " .. tostring(err))
+  return {
+    dispatched = dispatched,
+    notifications = notifications,
+    offered_items = offered_items,
+  }
+end
+
+describe("components picker: project_edit dispatch (#45)", function()
+  local entry = { value = { name = "Root.Vehicle.Speed" } }
+  -- A fake nvim-m1.project that exposes every editor wired by the picker.
+  local full_project = {
+    set_security = false,
+    set_type = false,
+    set_unit = false,
+    rename_component = false,
+    delete_component = false,
+    set_quantity = false,
+    set_validation = false,
+    set_format = false,
+    set_dps = false,
+    set_display_range = false,
+    add_tag = false,
+    remove_tag = false,
+  }
+
+  it("dispatches set_quantity with the selected component name", function()
+    local result =
+      run_edit(components._project_edit("set_quantity"), entry, full_project)
+    assert.equals(1, #result.dispatched)
+    assert.equals("set_quantity", result.dispatched[1].fn)
+    assert.equals("Root.Vehicle.Speed", result.dispatched[1].component)
+    assert.equals("/fake", result.dispatched[1].cfg.project_path)
+  end)
+
+  it("degrades with a WARN when nvim-m1 lacks the requested editor", function()
+    -- An OLDER nvim-m1 with none of the #61 editors present.
+    local old_project = { set_security = false }
+    local result =
+      run_edit(components._project_edit("set_validation"), entry, old_project)
+    assert.equals(0, #result.dispatched, "must not dispatch a missing function")
+    assert.is_true(#result.notifications > 0, "should notify about the gap")
+    assert.equals(vim.log.levels.WARN, result.notifications[1].level)
+  end)
+end)
+
+describe("components picker: select_edit attribute menu (#45)", function()
+  local entry = { value = { name = "Root.Vehicle.Speed" } }
+  local full_project = {
+    set_quantity = false,
+    set_validation = false,
+    set_format = false,
+    set_dps = false,
+    set_display_range = false,
+    add_tag = false,
+    remove_tag = false,
+  }
+
+  -- Every attribute the detail card surfaces must be reachable from the menu,
+  -- mapped to its nvim-m1.project editor (the parity the finding is about).
+  local expected = {
+    Quantity = "set_quantity",
+    Validation = "set_validation",
+    Format = "set_format",
+    ["Decimal places"] = "set_dps",
+    ["Display range"] = "set_display_range",
+    ["Add tag"] = "add_tag",
+    ["Remove tag"] = "remove_tag",
+  }
+
+  for label, fn in pairs(expected) do
+    it("'" .. label .. "' dispatches " .. fn, function()
+      local result = run_edit(components._select_edit, entry, full_project, label)
+      assert.equals(1, #result.dispatched, "exactly one editor should run")
+      assert.equals(fn, result.dispatched[1].fn)
+      assert.equals("Root.Vehicle.Speed", result.dispatched[1].component)
+    end)
+  end
+
+  it("offers all seven extra attributes in the menu", function()
+    local result = run_edit(components._select_edit, entry, full_project, nil)
+    local offered = result.offered_items
+    assert.equals(7, #offered)
+    -- the menu labels must be exactly the EXTRA_EDITS labels, in order
+    for i, e in ipairs(components._EXTRA_EDITS) do
+      assert.equals(e.label, offered[i])
+    end
+  end)
+
+  it("does nothing when the menu is dismissed", function()
+    local result = run_edit(components._select_edit, entry, full_project, nil)
+    assert.equals(0, #result.dispatched)
+  end)
+end)
+
 -- The nil/empty-filename guard is verified behaviourally above: the nil and
 -- empty-string cases assert edit_called == false and a WARN notification, which
 -- holds regardless of how the guard is spelled in the source.
