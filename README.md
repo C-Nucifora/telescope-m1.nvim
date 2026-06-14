@@ -69,6 +69,8 @@ Or via command palette:
 | components | `<C-f>` | (functions) jump to the backing script |
 | components | `<C-s>` / `<C-t>` / `<C-u>` | set the entry's security / storage type / display unit (via nvim-m1 + m1-project) |
 | components | `<C-r>` / `<C-d>` | rename / delete the component (via nvim-m1 + m1-project; delete confirms first) |
+| components | `<C-q>` | set the entry's physical quantity (via nvim-m1 + m1-project) |
+| components | `<C-e>` | edit another attribute — pick from validation / format / decimal places / display range / add tag / remove tag (via nvim-m1 + m1-project) |
 | call_rates | `<CR>` | browse the scripts scheduled at the picked rate |
 | call_rates | `<C-a>` | assign a script to the picked rate |
 | lint_rules | preview | the rule's full `m1-lint --explain` rationale (no browser needed) |
