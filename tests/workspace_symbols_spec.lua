@@ -202,50 +202,119 @@ describe("workspace_symbols picker: entry order matches LSP result order", funct
   end)
 end)
 
--- ─── qflist_previewer fallback ───────────────────────────────────────────────
+-- ─── qflist_previewer fallback (behavioural) ─────────────────────────────────
 
 describe("workspace_symbols picker: conf.qflist_previewer fallback", function()
-  -- When the picker spec carries no custom previewer, symbol_picker.open
-  -- receives previewer=nil and falls back to conf.qflist_previewer(opts).
-  -- We verify this at the source level (same textual-contract pattern as
-  -- call_rates_spec) rather than launching a real window.
+  -- When a picker spec carries no custom previewer, symbol_picker.open must
+  -- pass conf.qflist_previewer(opts) to pickers.new; when it carries one, that
+  -- custom previewer must flow through unchanged. We stub pickers.new to
+  -- capture the definition table it would build, then assert on the real value.
 
-  it("symbol_picker source uses spec.previewer OR conf.qflist_previewer", function()
-    local here = debug.getinfo(1, "S").source:sub(2)
-    local src_path = here:gsub(
-      "tests/workspace_symbols_spec%.lua$",
-      "lua/telescope-m1/symbol_picker.lua"
-    )
-    local f = assert(io.open(src_path, "r"))
-    local src = f:read("*a")
-    f:close()
+  local symbol_picker = require("telescope-m1.symbol_picker")
+  local pickers = require("telescope.pickers")
+  local conf = require("telescope.config").values
 
-    assert.is_true(
-      src:find("qflist_previewer", 1, true) ~= nil,
-      "symbol_picker must reference conf.qflist_previewer as fallback"
-    )
-    assert.is_true(
-      src:find("spec.previewer or conf.qflist_previewer", 1, true) ~= nil,
-      "fallback must be 'spec.previewer or conf.qflist_previewer'"
+  local orig_pickers_new
+  local orig_qflist
+  before_each(function()
+    orig_pickers_new = pickers.new
+    orig_qflist = conf.qflist_previewer
+  end)
+  after_each(function()
+    pickers.new = orig_pickers_new
+    conf.qflist_previewer = orig_qflist
+  end)
+
+  --- Capture the picker definition symbol_picker.open hands to pickers.new.
+  local function captured_def(opts, spec)
+    local def
+    pickers.new = function(_, d)
+      def = d
+      return { find = function() end }
+    end
+    symbol_picker.open(opts, spec)
+    return def
+  end
+
+  it("falls back to conf.qflist_previewer(opts) when spec.previewer is nil", function()
+    -- conf.qflist_previewer mints a fresh previewer object per call, so we
+    -- can't compare by identity against a second call. Instead spy on it:
+    -- a sentinel returned from the fallback must reach pickers.new, and it
+    -- must be invoked with the same opts the picker was opened with.
+    local opts = { layout_strategy = "vertical" }
+    local sentinel = { _marker = "qflist-fallback" }
+    local got_opts
+    conf.qflist_previewer = function(o)
+      got_opts = o
+      return sentinel
+    end
+
+    local def = captured_def(opts, {
+      title = "M1 Workspace Symbols",
+      entries = { { name = "Root.Speed", kind_label = "Variable" } },
+      -- previewer deliberately omitted → fallback path
+    })
+
+    assert.is_not_nil(def, "pickers.new must be called")
+    assert.equals(sentinel, def.previewer, "the qflist fallback must reach pickers.new")
+    assert.equals(
+      opts,
+      got_opts,
+      "qflist_previewer must be called with the picker opts"
     )
   end)
 
-  it("workspace_symbols picker passes no previewer so the fallback applies", function()
-    -- The picker source must NOT set a custom previewer; the fallback in
-    -- symbol_picker.open is the only thing that supplies one.
-    local here = debug.getinfo(1, "S").source:sub(2)
-    local src_path = here:gsub(
-      "tests/workspace_symbols_spec%.lua$",
-      "lua/telescope-m1/pickers/workspace_symbols.lua"
-    )
-    local f = assert(io.open(src_path, "r"))
-    local src = f:read("*a")
-    f:close()
+  it("uses spec.previewer unchanged when one is supplied", function()
+    -- A supplied previewer must flow through untouched; the fallback must NOT
+    -- run, so qflist_previewer is wired to fail if it is consulted.
+    conf.qflist_previewer = function()
+      error("qflist_previewer must not be called when spec.previewer is set")
+    end
+    local custom = { _marker = "custom-previewer" }
+    local def = captured_def({}, {
+      title = "M1 Components",
+      entries = { { name = "Root.Engine", kind_label = "Namespace" } },
+      previewer = custom,
+    })
+    assert.is_not_nil(def)
+    assert.equals(custom, def.previewer, "a supplied previewer must not be replaced")
+  end)
+end)
 
+describe("workspace_symbols picker: no custom previewer (fallback applies)", function()
+  -- The workspace_symbols picker supplies no previewer of its own, so the
+  -- spec that reaches symbol_picker.open carries previewer=nil and the
+  -- qflist fallback applies. Drive the real picker and capture the spec.
+
+  local m1_lsp = require("telescope-m1.lsp")
+  local orig_symbol_picker
+  local orig_ws_symbols
+
+  before_each(function()
+    orig_symbol_picker = package.loaded["telescope-m1.symbol_picker"]
+    orig_ws_symbols = m1_lsp.workspace_symbols
+  end)
+  after_each(function()
+    package.loaded["telescope-m1.symbol_picker"] = orig_symbol_picker
+    m1_lsp.workspace_symbols = orig_ws_symbols
+  end)
+
+  it("from_lsp is called with a spec that has no previewer", function()
+    local captured_spec
+    package.loaded["telescope-m1.symbol_picker"] = {
+      from_lsp = function(_, spec)
+        captured_spec = spec
+      end,
+      open = function() end,
+    }
+
+    package.loaded["telescope-m1.pickers.workspace_symbols"] = nil
+    require("telescope-m1.pickers.workspace_symbols")({})
+
+    assert.is_not_nil(captured_spec, "from_lsp must be called")
     assert.is_nil(
-      src:find("previewer", 1, true),
-      "workspace_symbols.lua must not set a custom previewer "
-        .. "(the qflist fallback in symbol_picker handles it)"
+      captured_spec.previewer,
+      "workspace_symbols must not set a custom previewer"
     )
   end)
 end)

@@ -134,29 +134,6 @@ describe("components picker: goto_backing_script filename guard", function()
   end)
 end)
 
--- ─── source-level contract ─────────────────────────────────────────────────
-
-describe("components picker: goto_backing_script source guard (#bug)", function()
-  it("source contains a nil/empty filename guard before vim.cmd.edit", function()
-    local here = debug.getinfo(1, "S").source:sub(2)
-    local src_path = here:gsub(
-      "tests/components_spec%.lua$",
-      "lua/telescope-m1/pickers/components.lua"
-    )
-    local f = assert(io.open(src_path, "r"))
-    local src = f:read("*a")
-    f:close()
-
-    -- The source must guard entry.filename before calling vim.cmd.edit.
-    -- Use plain-text search (no Lua pattern escaping): the literal strings we
-    -- look for are "entry.filename" and "not entry.filename".
-    assert.is_true(
-      src:find("entry.filename", 1, true) ~= nil
-        and (
-          src:find("not entry.filename", 1, true) ~= nil
-          or src:find('entry.filename == ""', 1, true) ~= nil
-        ),
-      "components.lua must guard entry.filename before calling vim.cmd.edit"
-    )
-  end)
-end)
+-- The nil/empty-filename guard is verified behaviourally above: the nil and
+-- empty-string cases assert edit_called == false and a WARN notification, which
+-- holds regardless of how the guard is spelled in the source.
