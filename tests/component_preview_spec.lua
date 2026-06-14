@@ -56,19 +56,7 @@ describe("telescope-m1.component_preview.lookup", function()
   end)
 end)
 
-describe("telescope-m1 call_rates delegation (#26)", function()
-  it("the picker source no longer spawns m1-project itself", function()
-    -- The set-call-rate mutation must go through nvim-m1's serialized async
-    -- runner, not a blocking vim.fn.system in the picker.
-    local here = debug.getinfo(1, "S").source:sub(2)
-    local src_path = here:gsub(
-      "tests/component_preview_spec%.lua$",
-      "lua/telescope-m1/pickers/call_rates.lua"
-    )
-    local f = assert(io.open(src_path, "r"))
-    local src = f:read("*a")
-    f:close()
-    assert.is_nil(src:find("vim.fn.system", 1, true), "picker must delegate to nvim-m1")
-    assert.is_true(src:find("set_call_rate_for", 1, true) ~= nil)
-  end)
-end)
+-- The call_rates set-call-rate delegation contract (#26) is exercised
+-- behaviourally in call_rates_spec.lua (it drives the real <C-a> handler and
+-- asserts project.set_call_rate_for is called with no process spawn), so there
+-- is no source-text duplicate of it here.

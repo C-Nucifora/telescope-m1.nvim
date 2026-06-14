@@ -4,8 +4,11 @@
 ---   * rate_value(): "startup" label → "startup"; "100Hz" → "100"; "1000Hz" → "1000"
 ---   * entry array access: entry[1] is used (not entry.value) for rate labels
 ---   * nvim-m1 absent path: picker notifies and returns early (no error thrown)
----   * set_call_rate_for delegation: called with the right config/script/rate args
----   * set_call_rate_for absent (old nvim-m1): a WARN notify, no error thrown
+---   * set_call_rate_for delegation: the <C-a> handler invokes
+---     project.set_call_rate_for with (config, script, rate, opts) and never
+---     spawns a process itself
+---   * set_call_rate_for absent (old nvim-m1): the <C-a> handler WARN-notifies,
+---     no error thrown
 
 -- ─── rate_value() ──────────────────────────────────────────────────────────
 -- rate_value is private-by-convention to the picker module, exposed for tests
@@ -124,61 +127,104 @@ describe("call_rates picker: nvim-m1 not installed", function()
   end)
 end)
 
--- ─── set_call_rate_for delegation ─────────────────────────────────────────
+-- ─── set_call_rate_for delegation (behavioural) ────────────────────────────
 
 describe("call_rates picker: set_call_rate_for delegation", function()
-  -- Verify that when nvim-m1 IS present, the picker passes the right
-  -- arguments (config, script, rate) to project.set_call_rate_for and
-  -- does NOT call vim.fn.system itself (the no-spawn contract from #26).
+  -- Drive the REAL <C-a> handler the picker registers, with a fake nvim-m1 /
+  -- nvim-m1.project injected via package.loaded, and assert it delegates to
+  -- project.set_call_rate_for with (config, script, rate, opts) — never
+  -- spawning a process itself.
 
-  it("the picker source calls set_call_rate_for, not vim.fn.system", function()
-    -- Read the source and assert textually — same approach as
-    -- component_preview_spec.lua for the delegation contract test.
-    local here = debug.getinfo(1, "S").source:sub(2)
-    local src_path = here:gsub(
-      "tests/call_rates_spec%.lua$",
-      "lua/telescope-m1/pickers/call_rates.lua"
-    )
-    local f = assert(io.open(src_path, "r"))
-    local src = f:read("*a")
-    f:close()
+  local orig_nvim_m1
+  local orig_nvim_m1_project
+  local orig_pickers_new
+  local orig_get_selected
+  local orig_close
+  local orig_ui_input
+  local orig_replace
+  local orig_system
+  local orig_systemlist
+  local orig_jobstart
+  local orig_notify
 
-    assert.is_nil(
-      src:find("vim%.fn%.system", 1, true),
-      "picker must not call vim.fn.system"
-    )
-    assert.is_true(
-      src:find("set_call_rate_for", 1, true) ~= nil,
-      "picker must delegate to project.set_call_rate_for"
-    )
+  local pickers = require("telescope.pickers")
+  local actions = require("telescope.actions")
+  local action_state = require("telescope.actions.state")
+
+  before_each(function()
+    orig_nvim_m1 = package.loaded["nvim-m1"]
+    orig_nvim_m1_project = package.loaded["nvim-m1.project"]
+    orig_pickers_new = pickers.new
+    orig_get_selected = action_state.get_selected_entry
+    orig_close = actions.close
+    orig_ui_input = vim.ui.input
+    orig_replace = actions.select_default.replace
+    orig_system = vim.fn.system
+    orig_systemlist = vim.fn.systemlist
+    orig_jobstart = vim.fn.jobstart
+    orig_notify = vim.notify
   end)
 
-  it("the picker guards against a missing set_call_rate_for (old nvim-m1)", function()
-    -- The source must contain an explicit nil-check for set_call_rate_for so
-    -- users on nvim-m1 < v0.11.0 get a clear message, not an error.
-    local here = debug.getinfo(1, "S").source:sub(2)
-    local src_path = here:gsub(
-      "tests/call_rates_spec%.lua$",
-      "lua/telescope-m1/pickers/call_rates.lua"
-    )
-    local f = assert(io.open(src_path, "r"))
-    local src = f:read("*a")
-    f:close()
-
-    -- The picker must guard: `if not project.set_call_rate_for then`
-    assert.is_true(
-      src:find("not project.set_call_rate_for", 1, true) ~= nil,
-      "picker must guard against missing set_call_rate_for"
-    )
+  after_each(function()
+    package.loaded["nvim-m1"] = orig_nvim_m1
+    package.loaded["nvim-m1.project"] = orig_nvim_m1_project
+    pickers.new = orig_pickers_new
+    action_state.get_selected_entry = orig_get_selected
+    actions.close = orig_close
+    vim.ui.input = orig_ui_input
+    actions.select_default.replace = orig_replace
+    vim.fn.system = orig_system
+    vim.fn.systemlist = orig_systemlist
+    vim.fn.jobstart = orig_jobstart
+    vim.notify = orig_notify
   end)
 
-  it("set_call_rate_for is called with config, script, rate, and opts table", function()
-    -- Stub nvim-m1 and nvim-m1.project so we can capture the call args
-    -- without needing the real plugin.
+  --- Run the picker with pickers.new stubbed to capture the picker definition,
+  --- then invoke its attach_mappings to capture the <C-a> handler. Returns the
+  --- captured handler (or nil if none was registered).
+  ---@param entry table        the "selected" rate entry (entry[1] = label)
+  ---@return function|nil c_a_handler
+  local function capture_c_a_handler(entry)
+    local captured_def
+    pickers.new = function(_, def)
+      captured_def = def
+      return { find = function() end }
+    end
+    -- Spawn guards: any process spawn turns into a hard failure.
+    vim.fn.system = function()
+      error("picker must not call vim.fn.system")
+    end
+    vim.fn.systemlist = function()
+      error("picker must not call vim.fn.systemlist")
+    end
+    vim.fn.jobstart = function()
+      error("picker must not call vim.fn.jobstart")
+    end
+    actions.close = function() end
+    action_state.get_selected_entry = function()
+      return entry
+    end
+    -- select_default:replace just records the <CR> handler; ignore it here.
+    actions.select_default.replace = function() end
+
+    require("telescope-m1.pickers.call_rates")({})
+
+    assert.is_not_nil(captured_def, "pickers.new must be called")
+    assert.is_function(captured_def.attach_mappings, "attach_mappings must be set")
+
+    local handlers = {}
+    local function fake_map(_, lhs, fn)
+      handlers[lhs] = fn
+    end
+    captured_def.attach_mappings(0, fake_map)
+    return handlers["<C-a>"]
+  end
+
+  it("the <C-a> handler delegates to set_call_rate_for, never spawning", function()
     local calls = {}
     local fake_config = { bin = "/usr/local/bin/m1" }
-    local fake_nvim_m1 = { config = fake_config }
-    local fake_project = {
+    package.loaded["nvim-m1"] = { config = fake_config }
+    package.loaded["nvim-m1.project"] = {
       rates = function()
         return { "100Hz", "1000Hz" }
       end,
@@ -186,44 +232,16 @@ describe("call_rates picker: set_call_rate_for delegation", function()
         calls[#calls + 1] = { cfg = cfg, script = script, rate = rate, opts = opts }
       end,
     }
-
-    local orig_require = _G.require
-    local orig_notify = vim.notify
-    local orig_input = vim.ui.input
-    local orig_close = require("telescope.actions").close
-
-    -- Stub telescope actions so we never touch a real UI.
-    local telescope_actions = require("telescope.actions")
-    local orig_select = telescope_actions.select_default
-    local orig_close_fn = telescope_actions.close
-
-    _G.require = function(mod)
-      if mod == "nvim-m1" then
-        return fake_nvim_m1
-      elseif mod == "nvim-m1.project" then
-        return fake_project
-      end
-      return orig_require(mod)
+    vim.notify = function() end
+    -- vim.ui.input feeds the script name to its callback synchronously.
+    vim.ui.input = function(_, on_confirm)
+      on_confirm("Root.Engine.Control")
     end
 
-    vim.notify = function() end
+    local handler = capture_c_a_handler({ "100Hz" })
+    assert.is_function(handler, "<C-a> must be mapped to a handler")
 
-    -- Capture the <C-a> mapping function without launching the real picker.
-    -- We do this by loading the module (which will call pcall(require,"nvim-m1"))
-    -- and verifying the delegation chain textually plus via the guard test above.
-    -- Direct handler invocation is fragile because it depends on a live prompt_bufnr.
-    -- Instead, call set_call_rate_for manually to confirm the arg contract.
-    local rate = "100"
-    local script = "Root.Engine.Control"
-    fake_project.set_call_rate_for(
-      fake_config,
-      script,
-      rate,
-      { label = script .. " call rate -> " .. "100Hz" }
-    )
-
-    _G.require = orig_require
-    vim.notify = orig_notify
+    handler() -- drive the real delegation path
 
     assert.equals(1, #calls)
     assert.equals(fake_config, calls[1].cfg)
@@ -231,6 +249,59 @@ describe("call_rates picker: set_call_rate_for delegation", function()
     assert.equals("100", calls[1].rate)
     assert.is_table(calls[1].opts)
     assert.is_truthy(calls[1].opts.label:find("call rate", 1, true))
+  end)
+
+  it("the <C-a> handler does nothing when the input is cancelled", function()
+    local calls = {}
+    package.loaded["nvim-m1"] = { config = {} }
+    package.loaded["nvim-m1.project"] = {
+      rates = function()
+        return { "100Hz" }
+      end,
+      set_call_rate_for = function()
+        calls[#calls + 1] = true
+      end,
+    }
+    vim.notify = function() end
+    vim.ui.input = function(_, on_confirm)
+      on_confirm(nil) -- user pressed <Esc>
+    end
+
+    local handler = capture_c_a_handler({ "100Hz" })
+    handler()
+    assert.equals(0, #calls, "no delegation when the script prompt is cancelled")
+  end)
+
+  it("the <C-a> handler WARN-guards when set_call_rate_for is missing", function()
+    -- Old nvim-m1 (< v0.11.0): project has no set_call_rate_for. The handler
+    -- must notify WARN and not error.
+    package.loaded["nvim-m1"] = { config = {} }
+    package.loaded["nvim-m1.project"] = {
+      rates = function()
+        return { "100Hz" }
+      end,
+      -- set_call_rate_for deliberately absent.
+    }
+    local notified = {}
+    vim.notify = function(msg, level)
+      notified[#notified + 1] = { msg = msg, level = level }
+    end
+    vim.ui.input = function(_, on_confirm)
+      on_confirm("Root.Engine.Control")
+    end
+
+    local handler = capture_c_a_handler({ "100Hz" })
+
+    assert.has_no.errors(function()
+      handler()
+    end)
+
+    assert.equals(1, #notified, "exactly one WARN when set_call_rate_for is missing")
+    assert.equals(vim.log.levels.WARN, notified[1].level)
+    assert.is_truthy(
+      notified[1].msg:find("v0.11.0", 1, true),
+      "the WARN should point at the nvim-m1 version requirement"
+    )
   end)
 end)
 
