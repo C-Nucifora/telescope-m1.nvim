@@ -43,6 +43,13 @@ in sync with `m1-lint` (see [Staying in sync](#staying-in-sync)).
 -- Workspace symbol picker
 require("telescope").extensions.m1.workspace_symbols()
 
+-- ...sliced server-side by an m1-lsp `workspace/symbol` facet: pass
+-- `type` / `security` / `tag` / `rate` (and free-text `query`) and they reach
+-- the LSP as `type:enum security:Tune …`, just like VS Code's symbol box.
+require("telescope").extensions.m1.workspace_symbols({ type = "enum" })
+require("telescope").extensions.m1.workspace_symbols({ security = "Tune" })
+require("telescope").extensions.m1.workspace_symbols({ tag = "Engine" })
+
 -- Project component browser
 require("telescope").extensions.m1.components()
 
@@ -56,6 +63,7 @@ require("telescope").extensions.m1.lint_rules()
 Or via command palette:
 ```
 :Telescope m1 workspace_symbols
+:Telescope m1 workspace_symbols type=enum security=Tune
 :Telescope m1 components
 :Telescope m1 lint_rules
 :Telescope m1 call_rates
