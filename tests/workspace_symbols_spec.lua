@@ -319,6 +319,80 @@ describe("workspace_symbols picker: no custom previewer (fallback applies)", fun
   end)
 end)
 
+-- ─── facet composition (type:/security:/tag:/rate:) ─────────────────────────
+-- m1-lsp's workspace/symbol parses leading `key:value` facet tokens
+-- server-side (workspace_symbol.rs). Telescope's prompt only fuzzy-filters the
+-- already-fetched rows, so typing `type:enum` into the prompt matched zero
+-- rows. The picker therefore composes facet opts into the LSP query so the
+-- slice reaches the server verbatim. These tests drive the REAL composition.
+
+describe("workspace_symbols picker: facet query composition", function()
+  -- compose_query is private-by-convention, exposed for tests as
+  -- ._compose_query. Calling the REAL function means any drift breaks here.
+  local ws = require("telescope-m1.pickers.workspace_symbols")
+  local compose = ws._compose_query
+
+  it("forwards a single type facet as `type:<v>`", function()
+    assert.equals("type:enum", compose({ type = "enum" }))
+  end)
+
+  it("forwards security/tag/rate facets verbatim", function()
+    assert.equals("security:Tune", compose({ security = "Tune" }))
+    assert.equals("tag:Engine", compose({ tag = "Engine" }))
+    assert.equals("rate:100", compose({ rate = 100 }))
+  end)
+
+  it("composes multiple facets in a deterministic order", function()
+    -- tag, security, rate, type — fixed so the query is stable/testable.
+    assert.equals(
+      "tag:Engine security:Tune rate:100 type:enum",
+      compose({ type = "enum", security = "Tune", tag = "Engine", rate = 100 })
+    )
+  end)
+
+  it("appends free `query` text after the facets", function()
+    assert.equals("type:enum torque", compose({ type = "enum", query = "torque" }))
+  end)
+
+  it("a bare query with no facets passes straight through", function()
+    assert.equals("Root.Speed", compose({ query = "Root.Speed" }))
+  end)
+
+  it("empty opts compose to the empty (all-symbols) query", function()
+    assert.equals("", compose({}))
+    assert.equals("", compose({ type = "", query = "" }))
+  end)
+end)
+
+describe("workspace_symbols picker: facet opts reach the LSP query", function()
+  -- End-to-end through the real picker: a facet opt must arrive at
+  -- m1_lsp.workspace_symbols as the spec.query (the call_rates spec proves
+  -- from_lsp forwards query; here we prove the picker composes it).
+  local orig_symbol_picker
+
+  before_each(function()
+    orig_symbol_picker = package.loaded["telescope-m1.symbol_picker"]
+  end)
+  after_each(function()
+    package.loaded["telescope-m1.symbol_picker"] = orig_symbol_picker
+  end)
+
+  it("a type facet opt reaches from_lsp as `type:enum`", function()
+    local captured_query
+    package.loaded["telescope-m1.symbol_picker"] = {
+      from_lsp = function(_, spec)
+        captured_query = spec.query
+      end,
+      open = function() end,
+    }
+
+    package.loaded["telescope-m1.pickers.workspace_symbols"] = nil
+    require("telescope-m1.pickers.workspace_symbols")({ type = "enum" })
+
+    assert.equals("type:enum", captured_query)
+  end)
+end)
+
 -- ─── no-client smoke test ────────────────────────────────────────────────────
 
 describe("workspace_symbols picker: no m1-lsp client attached", function()
