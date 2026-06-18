@@ -10,7 +10,9 @@
 local M = {}
 
 --- Render the card lines for a picker entry value + optional details record.
---- Pure (no editor calls), so it is unit-testable.
+--- Pure (no editor calls beyond `vim.fn.strdisplaywidth`, a headless-safe
+--- display-width query used to size the title underline), so it is
+--- unit-testable.
 ---@param sym { name?: string, kind_label?: string, container?: string }
 ---@param details? table  One record from `list-components --json`.
 ---@return string[] lines

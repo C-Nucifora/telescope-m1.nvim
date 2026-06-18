@@ -46,6 +46,47 @@ describe("telescope-m1.component_preview.render_card (#23)", function()
   end)
 end)
 
+describe("telescope-m1.component_preview.render_card doc honesty", function()
+  -- The header factors render_card as a pure helper "so it is unit-testable".
+  -- Its body's one editor call (vim.fn.strdisplaywidth, to size the title
+  -- underline) must be acknowledged in the doc comment the same way the sibling
+  -- explain_preview.render_lines documents its `vim.split` use -- otherwise the
+  -- purity claim is inaccurate and traps anyone testing it standalone.
+  local src = (function()
+    local path =
+      vim.api.nvim_get_runtime_file("lua/telescope-m1/component_preview.lua", false)[1]
+    local f = assert(io.open(path, "r"))
+    local body = f:read("*a")
+    f:close()
+    return body
+  end)()
+
+  it("uses strdisplaywidth (the sole editor call this doc must cover)", function()
+    assert.is_truthy(
+      src:find("vim.fn.strdisplaywidth", 1, true),
+      "render_card sizes its underline with vim.fn.strdisplaywidth"
+    )
+  end)
+
+  it("does not falsely claim 'no editor calls' full stop", function()
+    -- The bare claim "no editor calls)" (with no qualifier) is the bug.
+    assert.is_nil(
+      src:find("no editor calls)", 1, true),
+      "doc must qualify the purity claim because of strdisplaywidth"
+    )
+  end)
+
+  it("acknowledges strdisplaywidth in the doc comment", function()
+    -- Mirror the sibling convention: "no editor calls beyond `<call>`".
+    local doc_line = src:match("(%-%-%- Pure[^\n]*)")
+    assert.is_truthy(doc_line, "render_card has a 'Pure' doc line")
+    assert.is_truthy(
+      doc_line:find("strdisplaywidth", 1, true),
+      "the Pure doc line names strdisplaywidth as the tolerated editor call"
+    )
+  end)
+end)
+
 describe("telescope-m1.component_preview.lookup", function()
   it("tolerates the Root. prefix difference in either direction", function()
     local map = { ["Root.A.B"] = { path = "Root.A.B" }, ["C.D"] = { path = "C.D" } }
