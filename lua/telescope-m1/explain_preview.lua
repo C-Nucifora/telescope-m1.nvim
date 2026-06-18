@@ -67,6 +67,23 @@ function M.fetch_explain(code, cb)
   end)
 end
 
+--- Decide whether a late `--explain` callback may still paint its result.
+--- `get_buffer_by_name` keys one preview buffer per rule code, and telescope
+--- records that key as the live selection's `self.state.bufname`. So the rule
+--- the previewer is *currently* showing is identified by `current_name`; a
+--- result fetched for `requested` is stale (the user moved on) iff the two
+--- differ. Pure (no editor calls), so it is unit-testable. `current_name` may
+--- be nil/empty while telescope is mid-swap — treat that as "not current" so a
+--- racing callback never clobbers an indeterminate buffer.
+---@param current_name string?  the live selection's buffer key (a rule code).
+---@param requested string  the rule code this callback fetched for.
+---@return boolean
+function M.still_current(current_name, requested)
+  return type(current_name) == "string"
+    and current_name ~= ""
+    and current_name == requested
+end
+
 --- A buffer previewer for the lint_rules picker: for the selected rule it
 --- spawns `m1-lint --explain <code>` and renders the rationale, falling back to
 --- the static summary. A previous in-flight job is cancelled when the selection
@@ -117,16 +134,19 @@ function M.previewer(opts)
           return -- keep the static fallback already shown.
         end
         -- Only paint if the selection still points at the rule we fetched.
+        -- Job cancellation above is best-effort (the pcall swallows a failed
+        -- kill, and on_exit can still fire after SIGTERM), so a slow --explain
+        -- for an older code can arrive after the user moved on. telescope
+        -- records the live selection's buffer key (the rule code, from
+        -- get_buffer_by_name) in self.state.bufname, so compare that against
+        -- the code we fetched and drop the result on a mismatch.
+        if not M.still_current(self.state.bufname, requested) then
+          return
+        end
         local current = self.state.bufnr
         if vim.api.nvim_buf_is_valid(current) then
-          local name_ok = pcall(function()
-            return vim.api.nvim_buf_get_name(current)
-          end)
-          if name_ok then
-            set_lines(current, M.render_lines(rule, text))
-          end
+          set_lines(current, M.render_lines(rule, text))
         end
-        local _ = requested
       end)
     end,
   })

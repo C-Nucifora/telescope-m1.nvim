@@ -62,6 +62,26 @@ describe("telescope-m1.explain_preview.render_lines (#44)", function()
   end)
 end)
 
+describe("telescope-m1.explain_preview.still_current (guard)", function()
+  it("is true only when the live selection's code matches the fetched one", function()
+    assert.is_true(explain.still_current("L004", "L004"))
+  end)
+
+  it("is false when the user has moved to a different rule (stale result)", function()
+    -- A slow `--explain L004` that returns after the user moved to L006 must
+    -- not paint L004's rationale into the now-L006 buffer.
+    assert.is_false(explain.still_current("L006", "L004"))
+  end)
+
+  it("is false when the live selection key is nil (telescope mid-swap)", function()
+    assert.is_false(explain.still_current(nil, "L004"))
+  end)
+
+  it("is false when the live selection key is the empty string", function()
+    assert.is_false(explain.still_current("", "L004"))
+  end)
+end)
+
 describe("telescope-m1.explain_preview.fetch_explain (#44)", function()
   local rules = require("telescope-m1.rules")
   local orig_resolve = rules.resolve_m1_lint
