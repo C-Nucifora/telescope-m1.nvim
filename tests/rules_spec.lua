@@ -76,6 +76,22 @@ describe("telescope-m1.rules", function()
     assert.is_true(#l029.summary > 0, "L029 has a summary")
   end)
 
+  -- L030 clause-parentheses shipped with m1-lint v0.23.0; like L028/L029 it
+  -- must be in the offline fallback so the picker still offers it without a
+  -- binary.
+  it("fallback table includes L030 (clause-parentheses, m1-lint v0.23.0)", function()
+    local by_code = {}
+    for _, r in ipairs(rules.fallback_rules) do
+      by_code[r.code] = r
+    end
+    local l030 = by_code.L030
+    assert.is_not_nil(l030, "fallback table missing L030 (clause-parentheses)")
+    assert.equals("clause-parentheses", l030.name)
+    assert.equals("warning", l030.severity)
+    assert.equals(true, l030.fixable)
+    assert.is_true(#l030.summary > 0, "L030 has a summary")
+  end)
+
   it("flags L006 (float-eq-comparison) as an error", function()
     for _, r in ipairs(rules.all()) do
       if r.code == "L006" then

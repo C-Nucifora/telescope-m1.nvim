@@ -263,6 +263,13 @@ M.fallback_rules = {
     fixable = false,
     summary = "nested block is not indented one level per enclosing block (manual p.65)",
   },
+  {
+    code = "L030",
+    name = "clause-parentheses",
+    severity = "warning",
+    fixable = true,
+    summary = "wrap a comparison clause of a logical and/or in parentheses (manual p.65)",
+  },
 }
 
 --- All rules, in code order: the bundled binary's catalogue when available
