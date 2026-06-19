@@ -22,7 +22,7 @@ jobs:
     name: Lua Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: JohnnyMorganz/stylua-action@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -37,7 +37,7 @@ jobs:
       matrix:
         neovim: [stable, nightly]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: rhysd/action-setup-vim@v1
         with:
@@ -45,13 +45,13 @@ jobs:
           version: ${{ matrix.neovim }}
 
       - name: Check out plenary.nvim
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: nvim-lua/plenary.nvim
           path: deps/plenary.nvim
 
       - name: Check out telescope.nvim
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: nvim-telescope/telescope.nvim
           path: deps/telescope.nvim
