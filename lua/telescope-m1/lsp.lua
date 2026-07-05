@@ -48,6 +48,26 @@ function M.find_client()
   return nil
 end
 
+--- Issue an LSP request across the 0.10/0.11 `vim.lsp.Client.request` change.
+---
+--- Neovim 0.11 turned `Client.request` into a proper method (it reads `self`),
+--- so it must be called with the colon form. On 0.10 (this plugin's stated
+--- minimum) `request` was a plain function `(method, params, handler, bufnr)`
+--- with no `self`, so a colon call passed the client as `method` and shifted
+--- every argument — breaking every LSP-backed picker. Branch on the version so
+--- both work.
+---@param client vim.lsp.Client
+---@param method string
+---@param params table
+---@param handler fun(err: any, result: any)
+---@return boolean ok
+local function client_request(client, method, params, handler)
+  if vim.fn.has("nvim-0.11") == 1 then
+    return client:request(method, params, handler)
+  end
+  return client.request(method, params, handler)
+end
+
 --- Short label for an LSP SymbolKind number (e.g. 13 -> "Variable").
 ---@param kind integer
 ---@return string
@@ -141,16 +161,21 @@ function M.workspace_symbols(query, cb)
   end
 
   local ok = pcall(function()
-    client:request("workspace/symbol", { query = query or "" }, function(err, result)
-      if err then
-        return cb(nil, err.message or tostring(err))
+    client_request(
+      client,
+      "workspace/symbol",
+      { query = query or "" },
+      function(err, result)
+        if err then
+          return cb(nil, err.message or tostring(err))
+        end
+        local entries = {}
+        for _, sym in ipairs(result or {}) do
+          entries[#entries + 1] = M.symbol_to_entry(sym)
+        end
+        cb(entries)
       end
-      local entries = {}
-      for _, sym in ipairs(result or {}) do
-        entries[#entries + 1] = M.symbol_to_entry(sym)
-      end
-      cb(entries)
-    end)
+    )
   end)
   if not ok then
     cb(nil, "workspace/symbol request failed")

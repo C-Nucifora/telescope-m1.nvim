@@ -35,7 +35,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        neovim: [stable, nightly]
+        # v0.10.4 pins the README's stated minimum so the 0.10-specific
+        # `vim.lsp.Client.request` call form stays covered (it differs from
+        # 0.11+); stable/nightly track the moving targets.
+        neovim: [v0.10.4, stable, nightly]
     steps:
       - uses: actions/checkout@v7
 
