@@ -49,6 +49,29 @@ describe("call_rates picker: rate_value logic", function()
   end)
 end)
 
+-- ─── rate_query() ──────────────────────────────────────────────────────────
+-- rate_query builds the workspace-symbol `rate:` facet the <CR> handler issues.
+local rate_query = call_rates._rate_query
+
+describe("call_rates picker: rate_query (LSP rate: facet)", function()
+  it("numeric clocks strip Hz and prefix rate:", function()
+    assert.equals("rate:100", rate_query("100Hz"))
+    assert.equals("rate:1000", rate_query("1000Hz"))
+    assert.equals("rate:10", rate_query("10Hz"))
+  end)
+
+  it(
+    "the Startup clock queries the named rate rate:Startup (not a dead-end)",
+    function()
+      -- m1-lsp v0.45.0 accepts named rates; every startup spelling maps to the
+      -- canonical facet so <CR> browses Startup scripts instead of no-op'ing.
+      assert.equals("rate:Startup", rate_query("startup"))
+      assert.equals("rate:Startup", rate_query("Startup"))
+      assert.equals("rate:Startup", rate_query("On Startup"))
+    end
+  )
+end)
+
 -- ─── entry array access ────────────────────────────────────────────────────
 
 describe("call_rates picker: entry[1] array access", function()

@@ -15,6 +15,18 @@ local function rate_value(label)
   return label:lower():match("startup") and "startup" or (label:gsub("Hz$", ""))
 end
 
+--- The m1-lsp `workspace/symbol` `rate:` facet query for a rate label. Numeric
+--- clocks become `rate:<N>` (the Hz suffix stripped); the Startup clock becomes
+--- `rate:Startup` — m1-lsp v0.45.0 accepts named rates, so <CR> on Startup
+--- browses its scripts instead of dead-ending on a "no rate facet" notice.
+local function rate_query(label)
+  local v = rate_value(label)
+  if v == "startup" then
+    return "rate:Startup"
+  end
+  return "rate:" .. v
+end
+
 --- The picker is callable — `require("telescope-m1.pickers.call_rates")(opts)`
 --- still works — but is a table so `rate_value` can be exposed (underscore-
 --- prefixed) for the unit tests to invoke the real source.
@@ -27,8 +39,9 @@ Picker = setmetatable({}, {
   end,
 })
 
--- Private-by-convention handle for the unit tests.
+-- Private-by-convention handles for the unit tests.
 Picker._rate_value = rate_value
+Picker._rate_query = rate_query
 
 ---@param opts? table
 function Picker.open(opts)
@@ -55,24 +68,16 @@ function Picker.open(opts)
       sorter = conf.generic_sorter(opts),
       attach_mappings = function(bufnr, map)
         -- <CR>: the scripts scheduled at the picked rate, via the LSP's
-        -- `rate:` workspace-symbol facet.
+        -- `rate:` workspace-symbol facet (named rates like Startup included).
         actions.select_default:replace(function()
           local entry = action_state.get_selected_entry()
           if not entry then
             return
           end
           actions.close(bufnr)
-          local hz = rate_value(entry[1])
-          if hz == "startup" then
-            vim.notify(
-              "telescope-m1: startup scripts carry no rate facet",
-              vim.log.levels.INFO
-            )
-            return
-          end
           symbol_picker.from_lsp(opts, {
             title = "M1 Scripts @ " .. entry[1],
-            query = "rate:" .. hz,
+            query = rate_query(entry[1]),
           })
         end)
         -- <C-a>: assign a script to this rate.
