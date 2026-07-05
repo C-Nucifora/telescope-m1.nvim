@@ -16,7 +16,7 @@ describe("telescope m1 extension", function()
     assert.is_true(ok, (name or "export") .. " must be callable")
   end
 
-  it("loads and exposes the four pickers", function()
+  it("loads and exposes the pickers", function()
     telescope.setup({})
     assert.has_no.errors(function()
       telescope.load_extension("m1")
@@ -26,6 +26,7 @@ describe("telescope m1 extension", function()
     assert_callable(ext.workspace_symbols, "workspace_symbols")
     assert_callable(ext.components, "components")
     assert_callable(ext.lint_rules, "lint_rules")
+    assert_callable(ext.typecheck_rules, "typecheck_rules")
     assert_callable(ext.call_rates, "call_rates")
   end)
 

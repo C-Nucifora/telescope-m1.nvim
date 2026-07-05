@@ -4,6 +4,7 @@
 ---   workspace_symbols  fuzzy-search all channels, parameters, enums (m1-lsp)
 ---   components         browse the Project.m1prj component hierarchy
 ---   lint_rules         pick an m1-lint rule to document / yank / ignore
+---   typecheck_rules    browse the m1-typecheck T-code catalogue; document / yank
 ---   call_rates         browse execution-rate clocks; assign scripts (#10)
 local ok, telescope = pcall(require, "telescope")
 if not ok then
@@ -22,6 +23,7 @@ return telescope.register_extension({
     workspace_symbols = require("telescope-m1.pickers.workspace_symbols"),
     components = require("telescope-m1.pickers.components"),
     lint_rules = require("telescope-m1.pickers.lint_rules"),
+    typecheck_rules = require("telescope-m1.pickers.typecheck_rules"),
     call_rates = require("telescope-m1.pickers.call_rates"),
   },
 })
