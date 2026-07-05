@@ -270,6 +270,13 @@ M.fallback_rules = {
     fixable = true,
     summary = "wrap a comparison clause of a logical and/or in parentheses (manual p.65)",
   },
+  {
+    code = "L031",
+    name = "case-only-naming",
+    severity = "warning",
+    fixable = false,
+    summary = "local name differs from an object/channel only by letter case (manual p.64)",
+  },
 }
 
 --- All rules, in code order: the bundled binary's catalogue when available
@@ -369,11 +376,18 @@ function M.binary_catalogue()
   if not cmd then
     return nil
   end
-  local out = vim.fn.system({ cmd, "--rules", "--format", "json" })
-  if vim.v.shell_error ~= 0 then
+  -- :wait(5000) pumps the event loop (vs vim.fn.system's hard block) and the
+  -- timeout turns a hung binary into a clean fall-through to the static table,
+  -- not a frozen UI — mirroring nvim-m1's project queries.
+  local ok, res = pcall(function()
+    return vim
+      .system({ cmd, "--rules", "--format", "json" }, { text = true })
+      :wait(5000)
+  end)
+  if not ok or res.code ~= 0 then
     return nil
   end
-  return M.parse_catalogue(out)
+  return M.parse_catalogue(res.stdout)
 end
 
 --- Public alias so the health check can report the resolved m1-lint path

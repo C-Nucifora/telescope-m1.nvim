@@ -58,6 +58,9 @@ require("telescope").extensions.m1.call_rates()
 
 -- Lint rule picker
 require("telescope").extensions.m1.lint_rules()
+
+-- Typecheck T-code catalogue
+require("telescope").extensions.m1.typecheck_rules()
 ```
 
 Or via command palette:
@@ -66,6 +69,7 @@ Or via command palette:
 :Telescope m1 workspace_symbols type=enum security=Tune
 :Telescope m1 components
 :Telescope m1 lint_rules
+:Telescope m1 typecheck_rules
 :Telescope m1 call_rates
 ```
 
@@ -85,6 +89,8 @@ Or via command palette:
 | lint_rules | `<CR>` | open the rule's documentation |
 | lint_rules | `<C-y>` | yank the rule code (e.g. `L004`) |
 | lint_rules | `<C-i>` | append the code to the project's `.m1lint.toml` ignore list |
+| typecheck_rules | `<CR>` | open the m1-typecheck rule documentation |
+| typecheck_rules | `<C-y>` | yank the T-code (e.g. `T031`) |
 
 ## Staying in sync
 
