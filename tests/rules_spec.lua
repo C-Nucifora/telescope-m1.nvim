@@ -92,6 +92,21 @@ describe("telescope-m1.rules", function()
     assert.is_true(#l030.summary > 0, "L030 has a summary")
   end)
 
+  -- L031 case-only-naming shipped with m1-lint v0.24.0; like L028-L030 it must
+  -- be in the offline fallback so the picker still offers it without a binary.
+  it("fallback table includes L031 (case-only-naming, m1-lint v0.24.0)", function()
+    local by_code = {}
+    for _, r in ipairs(rules.fallback_rules) do
+      by_code[r.code] = r
+    end
+    local l031 = by_code.L031
+    assert.is_not_nil(l031, "fallback table missing L031 (case-only-naming)")
+    assert.equals("case-only-naming", l031.name)
+    assert.equals("warning", l031.severity)
+    assert.equals(false, l031.fixable)
+    assert.is_true(#l031.summary > 0, "L031 has a summary")
+  end)
+
   it("flags L006 (float-eq-comparison) as an error", function()
     for _, r in ipairs(rules.all()) do
       if r.code == "L006" then

@@ -270,6 +270,13 @@ M.fallback_rules = {
     fixable = true,
     summary = "wrap a comparison clause of a logical and/or in parentheses (manual p.65)",
   },
+  {
+    code = "L031",
+    name = "case-only-naming",
+    severity = "warning",
+    fixable = false,
+    summary = "local name differs from an object/channel only by letter case (manual p.64)",
+  },
 }
 
 --- All rules, in code order: the bundled binary's catalogue when available
