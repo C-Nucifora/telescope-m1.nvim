@@ -36,10 +36,12 @@ local function make_entry(displayer)
 end
 
 --- Add a rule code to the nearest .m1lint.toml `ignore` list (creating the file
---- if necessary), merging into an existing single-line `ignore` array rather
---- than appending a duplicate key. Best-effort, line-oriented to avoid a TOML
---- dependency; genuinely-complex cases (multi-line arrays) fall back to a
---- warn-and-append so the file is never corrupted.
+--- if necessary), merging into an existing `ignore` array (single- or
+--- multi-line) rather than writing a second `ignore` key that m1-lint would
+--- reject as a duplicate. `.m1lint.toml` keys are top-level — no `[lint]` table
+--- — so a fresh key is written as a bare top-level `ignore`. Best-effort and
+--- line-oriented to avoid a TOML dependency; a malformed (never-closed) array
+--- is left untouched with a warning so the file is never corrupted.
 local function ignore_in_config(code)
   local dir = vim.fn.getcwd()
   local buf = vim.api.nvim_buf_get_name(0)
@@ -61,21 +63,21 @@ local function ignore_in_config(code)
     return
   end
 
-  vim.fn.writefile(new_lines, path)
-
-  if status == "fallback" then
+  if status == "malformed" then
     vim.notify(
       "telescope-m1: "
         .. path
-        .. " has an `ignore` key this tool can't safely edit (multi-line array); "
-        .. 'appended a second `ignore = ["'
+        .. " has an `ignore` array that is opened but never closed; "
+        .. "left it unchanged — please add "
         .. code
-        .. '"]` — please merge it by hand to avoid a duplicate key.',
+        .. " by hand.",
       vim.log.levels.WARN
     )
-  else
-    vim.notify("telescope-m1: added " .. code .. " to ignore in " .. path)
+    return
   end
+
+  vim.fn.writefile(new_lines, path)
+  vim.notify("telescope-m1: added " .. code .. " to ignore in " .. path)
 end
 
 --- Yank a rule code to the `+` (system) and `"` (unnamed) registers (<C-y>).

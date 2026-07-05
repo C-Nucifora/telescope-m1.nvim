@@ -4,7 +4,8 @@
 ---   * make_entry / entry_maker: ordinal and display fields are correct
 ---   * ignore_in_config: delegates to ignore.merge_ignore and writes the file
 ---   * ignore_in_config: "already_ignored" path suppresses write
----   * ignore_in_config: "fallback" path triggers a WARN notify
+---   * ignore_in_config: multi-line merge (no duplicate key)
+---   * ignore_in_config: "malformed" path triggers a WARN notify, no write
 ---   * yank handler: setreg receives the correct code (tested via the
 ---     action_state mock pattern used by the existing specs)
 local rules = require("telescope-m1.rules")
@@ -214,17 +215,19 @@ describe("lint_rules picker: ignore_in_config", function()
     }
   end
 
-  it("creates a .m1lint.toml when no file exists", function()
+  it("creates a .m1lint.toml with a top-level ignore (no [lint] table)", function()
+    -- `.m1lint.toml` keys are top-level; a `[lint]` header makes m1-lint reject
+    -- the file (`unknown config key: lint`), so it must NEVER be written.
     local result = run_ignore_in_config("L004", nil, nil)
     assert.is_not_nil(result.written_lines, "file must be written")
     local content = table.concat(result.written_lines, "\n")
     assert.is_truthy(content:find("L004", 1, true))
-    assert.is_truthy(content:find("%[lint%]"))
+    assert.is_nil(content:find("%[lint%]"), "must not write a [lint] table")
     assert.equals(1, #result.notifications)
   end)
 
   it("merges code into an existing single-line ignore array", function()
-    local existing = { "[lint]", 'ignore = ["L001"]' }
+    local existing = { 'ignore = ["L001"]' }
     local result = run_ignore_in_config("L004", existing, "/fake/cwd/.m1lint.toml")
     assert.is_not_nil(result.written_lines)
     local content = table.concat(result.written_lines, "\n")
@@ -233,7 +236,7 @@ describe("lint_rules picker: ignore_in_config", function()
   end)
 
   it("skips writefile when the code is already ignored", function()
-    local existing = { "[lint]", 'ignore = ["L004"]' }
+    local existing = { 'ignore = ["L004"]' }
     local result = run_ignore_in_config("L004", existing, "/fake/cwd/.m1lint.toml")
     assert.is_nil(
       result.written_lines,
@@ -244,22 +247,39 @@ describe("lint_rules picker: ignore_in_config", function()
     assert.is_truthy(result.notifications[1].msg:find("already ignored", 1, true))
   end)
 
-  it("emits a WARN notification for the multi-line-array fallback path", function()
+  it("merges into a multi-line array without a duplicate ignore key", function()
+    -- The old fallback appended a second `ignore =`, which TOML rejects as a
+    -- duplicate key; the fix merges into the existing array instead.
     local existing = {
-      "[lint]",
       "ignore = [",
       '  "L001",',
       "]",
     }
     local result = run_ignore_in_config("L004", existing, "/fake/cwd/.m1lint.toml")
     assert.is_not_nil(result.written_lines)
+    local content = table.concat(result.written_lines, "\n")
+    assert.is_truthy(content:find('"L001"', 1, true))
+    assert.is_truthy(content:find('"L004"', 1, true))
+    -- Exactly one `ignore` key survives (no duplicate).
+    local _, n = content:gsub("ignore%s*=", "")
+    assert.equals(1, n, "there must be exactly one ignore key")
+    assert.equals(1, #result.notifications)
+    assert.is_not.equal(vim.log.levels.WARN, result.notifications[1].level)
+  end)
+
+  it("WARN-guards a never-closed array and leaves the file unchanged", function()
+    local existing = {
+      "ignore = [",
+      '  "L001",',
+    }
+    local result = run_ignore_in_config("L004", existing, "/fake/cwd/.m1lint.toml")
+    assert.is_nil(result.written_lines, "malformed file must NOT be written")
     assert.equals(1, #result.notifications)
     assert.equals(vim.log.levels.WARN, result.notifications[1].level)
-    assert.is_truthy(result.notifications[1].msg:find("multi-line array", 1, true))
   end)
 
   it("uses the found .m1lint.toml path, not a synthesized one", function()
-    local existing = { "[lint]", 'ignore = ["L001"]' }
+    local existing = { 'ignore = ["L001"]' }
     local found = "/project/root/.m1lint.toml"
     local result = run_ignore_in_config("L004", existing, found)
     assert.equals(found, result.written_path)
