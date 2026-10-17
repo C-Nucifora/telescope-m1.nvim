@@ -15,15 +15,23 @@
 local M = {}
 
 -- Strip an inline `#` comment from a line, ignoring `#` characters that appear
--- inside a double-quoted string. Returns the code portion of the line.
+-- inside a quoted string. Returns the code portion of the line.
 local function strip_comment(line)
   local out = {}
-  local in_str = false
+  local quote, escaped
   for i = 1, #line do
     local ch = line:sub(i, i)
-    if ch == '"' then
-      in_str = not in_str
-    elseif ch == "#" and not in_str then
+    if quote then
+      if escaped then
+        escaped = false
+      elseif ch == "\\" and quote == '"' then
+        escaped = true
+      elseif ch == quote then
+        quote = nil
+      end
+    elseif ch == '"' or ch == "'" then
+      quote = ch
+    elseif ch == "#" then
       break
     end
     out[#out + 1] = ch
@@ -35,7 +43,7 @@ end
 -- Returns the list in order.
 local function parse_codes(body)
   local codes = {}
-  for c in body:gmatch('"([^"]*)"') do
+  for _, c in body:gmatch("(['\"])(.-)%1") do
     codes[#codes + 1] = c
   end
   return codes
@@ -64,7 +72,11 @@ function M.merge_ignore(lines, code)
     if l:match("^%s*%[") and l:match("%]") then
       first_table_idx = i
       break
-    elseif l:match("^%s*ignore%s*=") then
+    elseif
+      l:match("^%s*ignore%s*=")
+      or l:match('^%s*"ignore"%s*=')
+      or l:match("^%s*'ignore'%s*=")
+    then
       ignore_idx = i
       break
     end
@@ -93,15 +105,18 @@ function M.merge_ignore(lines, code)
     end
 
     -- Multi-line array: find the closing `]`, collecting the codes on the way.
-    local close_idx, last_elem_indent
+    local close_idx, last_elem_idx, last_elem_indent
     for i = ignore_idx, #lines do
       local l = strip_comment(lines[i])
-      for _, c in ipairs(parse_codes(l)) do
+      local body = i == ignore_idx and (l:match("%[(.*)") or "") or l
+      local codes = parse_codes(body)
+      for _, c in ipairs(codes) do
         if c == code then
           return lines, "already_ignored"
         end
       end
-      if l:match('"') then
+      if #codes > 0 then
+        last_elem_idx = i
         last_elem_indent = lines[i]:match("^(%s*)")
       end
       if l:match("%]") then
@@ -115,7 +130,20 @@ function M.merge_ignore(lines, code)
       return lines, "malformed"
     end
     local indent = last_elem_indent or "\t"
-    table.insert(lines, close_idx, ('%s"%s",'):format(indent, code))
+    if last_elem_idx == close_idx then
+      local prefix, suffix = lines[close_idx]:match("^(.-)(%].*)$")
+      local separator = prefix:match(",%s*$") and " " or ", "
+      lines[close_idx] = prefix .. separator .. ('"%s",'):format(code) .. suffix
+    else
+      if last_elem_idx then
+        local last = strip_comment(lines[last_elem_idx])
+        if not last:match(",%s*$") then
+          local value = last:gsub("%s+$", "")
+          lines[last_elem_idx] = value .. "," .. lines[last_elem_idx]:sub(#value + 1)
+        end
+      end
+      table.insert(lines, close_idx, ('%s"%s",'):format(indent, code))
+    end
     return lines, "merged_multiline"
   end
 
