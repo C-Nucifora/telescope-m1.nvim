@@ -28,20 +28,24 @@ end
 --- Only the `m1scr` filetype is a reliable M1 signal.
 ---@return vim.lsp.Client?
 function M.find_client()
-  local clients = vim.lsp.get_clients()
-
-  for _, want in ipairs(client_names()) do
-    for _, c in ipairs(clients) do
-      if c.name == want then
-        return c
+  -- The current buffer's project wins when multiple M1 workspaces are open.
+  for _, clients in ipairs({
+    vim.lsp.get_clients({ bufnr = 0 }),
+    vim.lsp.get_clients(),
+  }) do
+    for _, want in ipairs(client_names()) do
+      for _, c in ipairs(clients) do
+        if c.name == want then
+          return c
+        end
       end
     end
-  end
 
-  for _, c in ipairs(clients) do
-    local fts = (c.config or {}).filetypes or {}
-    if vim.tbl_contains(fts, "m1scr") then
-      return c
+    for _, c in ipairs(clients) do
+      local fts = (c.config or {}).filetypes or {}
+      if vim.tbl_contains(fts, "m1scr") then
+        return c
+      end
     end
   end
 
@@ -160,8 +164,8 @@ function M.workspace_symbols(query, cb)
     )
   end
 
-  local ok = pcall(function()
-    client_request(
+  local ok, requested = pcall(function()
+    return client_request(
       client,
       "workspace/symbol",
       { query = query or "" },
@@ -177,7 +181,7 @@ function M.workspace_symbols(query, cb)
       end
     )
   end)
-  if not ok then
+  if not ok or requested == false then
     cb(nil, "workspace/symbol request failed")
   end
 end
