@@ -1,134 +1,203 @@
---- telescope-m1: pure helpers for merging a lint code into a .m1lint.toml
---- `ignore` array without a TOML dependency.
----
---- `.m1lint.toml` keys are TOP-LEVEL — there is no `[lint]` table. A `[lint]`
---- header makes m1-lint reject the whole file (`unknown config key: lint`,
---- exit 2), so this module never writes one; a new top-level `ignore` key is
---- placed before the first table header (e.g. `[severity]`) so it stays
---- top-level rather than being swallowed by that table.
----
---- The logic is line-oriented (no full TOML parse) but, unlike a naive append,
---- it merges into an existing `ignore` array — single- or multi-line — instead
---- of writing a second `ignore` key, which TOML rejects outright as a duplicate
---- key. A genuinely-malformed array (opened but never closed) is left untouched
---- and reported, so the file is never corrupted.
+--- Merge a top-level lint ignore array while preserving its text and comments.
+--- Unsupported string/key syntax is refused without changing the input.
 local M = {}
 
--- Strip an inline `#` comment from a line, ignoring `#` characters that appear
--- inside a double-quoted string. Returns the code portion of the line.
-local function strip_comment(line)
-  local out = {}
-  local in_str = false
-  for i = 1, #line do
-    local ch = line:sub(i, i)
-    if ch == '"' then
-      in_str = not in_str
-    elseif ch == "#" and not in_str then
+local function skip_space(text, at)
+  while at <= #text do
+    local ch = text:sub(at, at)
+    if ch:match("%s") then
+      at = at + 1
+    elseif ch == "#" then
+      at = text:find("\n", at, true) or (#text + 1)
+    else
       break
     end
-    out[#out + 1] = ch
   end
-  return table.concat(out)
+  return at
 end
 
--- Parse the quoted codes out of an array body such as `"L001", "L002",`.
--- Returns the list in order.
-local function parse_codes(body)
-  local codes = {}
-  for c in body:gmatch('"([^"]*)"') do
-    codes[#codes + 1] = c
+local function quoted(text, at, escapes)
+  local quote = text:sub(at, at)
+  if text:sub(at, at + 2) == quote:rep(3) then
+    return nil
   end
-  return codes
+  local start = at
+  at = at + 1
+  while at <= #text do
+    local ch = text:sub(at, at)
+    if ch == quote then
+      return text:sub(start + 1, at - 1), at + 1
+    end
+    if ch == "\n" or ch == "\r" then
+      return nil
+    end
+    if ch == "\\" and quote == '"' then
+      if not escapes then
+        return nil
+      end
+      at = at + 1
+    end
+    at = at + 1
+  end
 end
 
---- Merge `code` into an `ignore = [...]` array within `lines`, purely (no I/O).
----
---- Returns `new_lines, status` where status is one of:
----   * "already_ignored"  — `code` is already in the array; lines unchanged.
----   * "merged"           — `code` was added to an existing single-line array.
----   * "merged_multiline" — `code` was inserted into a multi-line array.
----   * "created"          — a new top-level `ignore = ["code"]` line was added
----                          (before the first table header, or at end of file).
----   * "malformed"        — an `ignore` array was opened but never closed; the
----                          file is left UNCHANGED and the caller should WARN.
+-- Find the next statement without mistaking an array element for a top-level key.
+local function value_end(text, at)
+  local stack = {}
+  while at <= #text do
+    local ch = text:sub(at, at)
+    if ch == '"' or ch == "'" then
+      local _, next_at = quoted(text, at, true)
+      if not next_at then
+        return nil
+      end
+      at = next_at
+    elseif ch == "#" then
+      at = text:find("\n", at, true) or (#text + 1)
+    elseif ch == "\n" and #stack == 0 then
+      return at
+    elseif ch == "[" or ch == "{" then
+      stack[#stack + 1] = ch == "[" and "]" or "}"
+      at = at + 1
+    elseif ch == "]" or ch == "}" then
+      if table.remove(stack) ~= ch then
+        return nil
+      end
+      at = at + 1
+    else
+      at = at + 1
+    end
+  end
+  if #stack == 0 then
+    return at
+  end
+end
+
+local function parse_array(text, at, finish)
+  at = skip_space(text, at)
+  if text:sub(at, at) ~= "[" then
+    return nil
+  end
+  local values, last_end, comma = {}, nil, false
+  at = skip_space(text, at + 1)
+  while at < finish do
+    local ch = text:sub(at, at)
+    if ch == "]" then
+      if skip_space(text:sub(1, finish - 1), at + 1) ~= finish then
+        return nil
+      end
+      return { values = values, last_end = last_end, comma = comma, close = at }
+    end
+    if #values > 0 and not comma then
+      return nil
+    end
+    if ch ~= '"' and ch ~= "'" then
+      return nil
+    end
+    local value, next_at = quoted(text, at, false)
+    if not next_at then
+      return nil
+    end
+    values[#values + 1] = value
+    last_end = next_at - 1
+    at = skip_space(text, next_at)
+    comma = text:sub(at, at) == ","
+    if comma then
+      at = skip_space(text, at + 1)
+    end
+  end
+end
+
 ---@param lines string[]
 ---@param code string
 ---@return string[] new_lines, string status
 function M.merge_ignore(lines, code)
-  -- Single pass over the top-level region: stop at either the first top-level
-  -- `ignore` key or the first table header, whichever comes first (top-level
-  -- keys must precede any `[table]`, so a top-level `ignore` is always first).
-  local first_table_idx, ignore_idx
-  for i, raw in ipairs(lines) do
-    local l = strip_comment(raw)
-    if l:match("^%s*%[") and l:match("%]") then
-      first_table_idx = i
-      break
-    elseif l:match("^%s*ignore%s*=") then
-      ignore_idx = i
-      break
-    end
+  if type(code) ~= "string" or not code:match("^L%d+$") then
+    return lines, "malformed"
   end
-
-  if ignore_idx then
-    local raw = lines[ignore_idx]
-    -- A single-line array closes its bracket on the same line.
-    if strip_comment(raw):match("%]") then
-      local body = strip_comment(raw):match("%[(.-)%]")
-      local existing = parse_codes(body or "")
-      for _, c in ipairs(existing) do
-        if c == code then
-          return lines, "already_ignored"
-        end
-      end
-      existing[#existing + 1] = code
-      local quoted = {}
-      for _, c in ipairs(existing) do
-        quoted[#quoted + 1] = ('"%s"'):format(c)
-      end
-      -- Preserve any leading indentation on the original line.
-      local indent = raw:match("^(%s*)") or ""
-      lines[ignore_idx] = ("%signore = [%s]"):format(indent, table.concat(quoted, ", "))
-      return lines, "merged"
+  local text = table.concat(lines, "\n")
+  local at, found, first_table = 1, nil, nil
+  while true do
+    at = skip_space(text, at)
+    if at > #text then
+      break
     end
-
-    -- Multi-line array: find the closing `]`, collecting the codes on the way.
-    local close_idx, last_elem_indent
-    for i = ignore_idx, #lines do
-      local l = strip_comment(lines[i])
-      for _, c in ipairs(parse_codes(l)) do
-        if c == code then
-          return lines, "already_ignored"
-        end
+    local ch = text:sub(at, at)
+    if ch == "[" then
+      -- .m1lint.toml has one supported table. Refuse unknown headers rather
+      -- than risk introducing a key that conflicts with an existing table.
+      if not text:sub(at):match("^%[%s*[\"']?severity[\"']?%s*%]") then
+        return lines, "malformed"
       end
-      if l:match('"') then
-        last_elem_indent = lines[i]:match("^(%s*)")
-      end
-      if l:match("%]") then
-        close_idx = i
-        break
+      first_table = at
+      break
+    end
+    local key, next_at
+    if ch == '"' or ch == "'" then
+      key, next_at = quoted(text, at, false)
+    else
+      local relative
+      key, relative = text:sub(at):match("^([%w_.%-]+)()")
+      if relative then
+        next_at = at + relative - 1
       end
     end
-    if not close_idx then
-      -- Opened but never closed: appending anything risks a duplicate/garbage
-      -- key, so leave the file untouched and let the caller warn.
+    if not next_at then
       return lines, "malformed"
     end
-    local indent = last_elem_indent or "\t"
-    table.insert(lines, close_idx, ('%s"%s",'):format(indent, code))
-    return lines, "merged_multiline"
+    local eq = text:find("[^ \t]", next_at)
+    if not eq or text:sub(eq, eq) ~= "=" then
+      return lines, "malformed"
+    end
+    local finish = value_end(text, eq + 1)
+    if not finish then
+      return lines, "malformed"
+    end
+    if key == "ignore" then
+      if found then
+        return lines, "malformed"
+      end
+      found = parse_array(text, eq + 1, finish)
+      if not found then
+        return lines, "malformed"
+      end
+    elseif key:match("^ignore%.") then
+      return lines, "malformed"
+    end
+    at = finish + 1
   end
 
-  -- No `ignore` key yet: add one as a top-level key. It must come before the
-  -- first table header (else it lands inside that table), so insert there;
-  -- with no table, append at the end of the file.
-  local new_line = ('ignore = ["%s"]'):format(code)
-  if first_table_idx then
-    table.insert(lines, first_table_idx, new_line)
-  else
-    lines[#lines + 1] = new_line
+  if not found then
+    local result = vim.deepcopy(lines)
+    local index = first_table
+        and select(2, text:sub(1, first_table - 1):gsub("\n", "")) + 1
+      or #result + 1
+    table.insert(result, index, ('ignore = ["%s"]'):format(code))
+    return result, "created"
   end
-  return lines, "created"
+  for _, value in ipairs(found.values) do
+    if value == code then
+      return lines, "already_ignored"
+    end
+  end
+  local close_line = text:sub(1, found.close - 1):match(".*\n()") or 1
+  local multiline = close_line > 1
+    and text:sub(close_line, found.close - 1):match("^%s*$")
+  local insertion, insert_at
+  if multiline then
+    local prefix = found.last_end and text:sub(1, found.last_end) or ""
+    local indent = prefix:match("\n([ \t]*)[^\n]*$") or "\t"
+    insertion, insert_at = indent .. '"' .. code .. '",\n', close_line
+  else
+    local separator = #found.values == 0 and "" or (found.comma and "" or ", ")
+    insertion, insert_at = separator .. '"' .. code .. '"', found.close
+  end
+  text = text:sub(1, insert_at - 1) .. insertion .. text:sub(insert_at)
+  if multiline and found.last_end and not found.comma then
+    text = text:sub(1, found.last_end) .. "," .. text:sub(found.last_end + 1)
+  end
+  return vim.split(text, "\n", { plain = true }),
+    multiline and "merged_multiline" or "merged"
 end
 
 return M

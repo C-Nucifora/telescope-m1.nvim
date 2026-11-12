@@ -12,6 +12,8 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PLENARY_PATH="${PLENARY_PATH:-$HOME/.local/share/nvim/lazy/plenary.nvim}"
 export TELESCOPE_PATH="${TELESCOPE_PATH:-$HOME/.local/share/nvim/lazy/telescope.nvim}"
 
+nvim --headless --noplugin -u "$here/tests/minimal_init.lua" -l "$here/tests/startup.lua"
+
 nvim --headless --noplugin -u "$here/tests/minimal_init.lua" \
   -c "PlenaryBustedDirectory $here/tests { minimal_init = '$here/tests/minimal_init.lua', sequential = true }" \
   "$@"

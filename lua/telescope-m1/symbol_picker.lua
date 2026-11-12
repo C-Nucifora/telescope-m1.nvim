@@ -91,7 +91,7 @@ function M.from_lsp(opts, spec)
         attach_mappings = spec.attach_mappings,
       })
     end)
-  end)
+  end, spec.context)
 end
 
 -- Private-by-convention handle for the unit tests (see make_entry above).

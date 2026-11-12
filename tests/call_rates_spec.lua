@@ -208,6 +208,13 @@ describe("call_rates picker: set_call_rate_for delegation", function()
   ---@param entry table        the "selected" rate entry (entry[1] = label)
   ---@return function|nil c_a_handler
   local function capture_c_a_handler(entry)
+    local project = package.loaded["nvim-m1.project"]
+    project.bind_project = function(cfg)
+      return cfg
+    end
+    project.project_file = function()
+      return "/fixture/Project.m1prj"
+    end
     local captured_def
     pickers.new = function(_, def)
       captured_def = def
@@ -358,6 +365,12 @@ describe("call_rates picker: empty rates list", function()
     -- Inject fakes into the module cache so the picker's `require` calls
     -- pick them up without touching `_G.require`.
     local fake_project = {
+      bind_project = function(cfg)
+        return cfg
+      end,
+      project_file = function()
+        return "/fixture/Project.m1prj"
+      end,
       rates = function()
         return {}
       end,

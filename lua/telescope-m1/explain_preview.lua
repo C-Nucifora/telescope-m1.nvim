@@ -53,10 +53,12 @@ function M.fetch_explain(code, cb)
   local rules = require("telescope-m1.rules")
   local bin = rules.resolve_m1_lint()
   if not bin then
-    cb(nil) -- no binary (e.g. headless tests, no toolchain): static fallback.
+    vim.schedule(function()
+      cb(nil)
+    end)
     return nil
   end
-  return vim.system({ bin, "--explain", code }, {}, function(res)
+  local spawned, job = pcall(vim.system, { bin, "--explain", code }, {}, function(res)
     local text = nil
     if res.code == 0 and res.stdout and res.stdout ~= "" then
       text = res.stdout
@@ -65,6 +67,13 @@ function M.fetch_explain(code, cb)
       cb(text)
     end)
   end)
+  if not spawned then
+    vim.schedule(function()
+      cb(nil)
+    end)
+    return nil
+  end
+  return job
 end
 
 --- Decide whether a late `--explain` callback may still paint its result.
@@ -93,7 +102,14 @@ end
 ---@param opts table
 function M.previewer(opts)
   local previewers = require("telescope.previewers")
-  local job ---@type table?  the in-flight vim.system handle, if any.
+  local request
+  local function cancel()
+    local old = request
+    request = nil
+    if old and old.job then
+      pcall(old.job.kill, old.job, 15)
+    end
+  end
 
   --- Write lines into the preview buffer iff it is still the live one for this
   --- request (guards against a late callback clobbering a newer selection).
@@ -108,6 +124,7 @@ function M.previewer(opts)
 
   return previewers.new_buffer_previewer({
     title = "M1 Lint Rule",
+    teardown = cancel,
     -- One buffer per rule code: cache the rendered explanation across re-selects.
     get_buffer_by_name = function(_, entry)
       return entry.value and entry.value.code or tostring(entry.ordinal)
@@ -116,20 +133,20 @@ function M.previewer(opts)
       local rule = entry.value or {}
       local bufnr = self.state.bufnr
       -- Cancel any still-running fetch from a previous selection.
-      if job then
-        pcall(function()
-          job:kill(15)
-        end)
-        job = nil
-      end
+      cancel()
       -- Static fallback immediately so the pane is never blank.
       set_lines(bufnr, M.render_lines(rule, nil))
       if not rule.code then
         return
       end
       local requested = rule.code
-      job = M.fetch_explain(rule.code, function(text)
-        job = nil
+      local active = {}
+      request = active
+      active.job = M.fetch_explain(rule.code, function(text)
+        if request ~= active then
+          return
+        end
+        request = nil
         if not text then
           return -- keep the static fallback already shown.
         end

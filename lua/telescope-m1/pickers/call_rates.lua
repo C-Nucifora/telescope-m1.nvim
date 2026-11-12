@@ -52,7 +52,23 @@ function Picker.open(opts)
     return
   end
   local project = require("nvim-m1.project")
-  local rates = project.rates(nvim_m1.config)
+  if type(project.bind_project) ~= "function" then
+    vim.notify(
+      "telescope-m1: update nvim-m1 to bind the call-rate picker to its project",
+      vim.log.levels.WARN
+    )
+    return
+  end
+  local cfg = project.bind_project(nvim_m1.config)
+  local context = require("telescope-m1.lsp").capture_context()
+  local prj = project.project_file(cfg)
+  local uv = vim.uv or vim.loop
+  local client_project = uv.fs_realpath(context.project_file or "") or context.project_file
+  if client_project ~= (uv.fs_realpath(prj or "") or prj) then
+    context.client = nil
+    context.error = "no M1 client attached for this picker's project"
+  end
+  local rates = project.rates(cfg)
   if #rates == 0 then
     vim.notify(
       "telescope-m1: no execution-rate clocks found (no project?)",
@@ -77,6 +93,7 @@ function Picker.open(opts)
           actions.close(bufnr)
           symbol_picker.from_lsp(opts, {
             title = "M1 Scripts @ " .. entry[1],
+            context = context,
             query = rate_query(entry[1]),
           })
         end)
@@ -104,7 +121,7 @@ function Picker.open(opts)
               )
               return
             end
-            project.set_call_rate_for(nvim_m1.config, script, rate, {
+            project.set_call_rate_for(cfg, script, rate, {
               label = script .. " call rate -> " .. entry[1],
             })
           end)

@@ -15,7 +15,7 @@ in sync with `m1-lint` (see [Staying in sync](#staying-in-sync)).
 ## Requirements
 
 - Neovim ≥ 0.10
-- [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim)
+- [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) 0.1.8, compatible with Neovim 0.10. Newer Telescope versions require newer Neovim releases.
 - [m1-lsp](https://github.com/C-Nucifora/m1-lsp) running in the workspace (symbol/component pickers)
 - Recommended: [nvim-m1](https://github.com/C-Nucifora/nvim-m1) — sets up `m1-lsp` and shares the
   canonical client name so the pickers find it automatically. Works with any
@@ -28,7 +28,7 @@ in sync with `m1-lint` (see [Staying in sync](#staying-in-sync)).
 {
   "C-Nucifora/telescope-m1.nvim",
   dependencies = {
-    "nvim-telescope/telescope.nvim",
+    { "nvim-telescope/telescope.nvim", tag = "0.1.8" },
     "C-Nucifora/nvim-m1", -- recommended: starts m1-lsp + shares the client name
   },
   config = function()
@@ -125,3 +125,10 @@ GPL-3.0-or-later — see [LICENSE](LICENSE).
 Independent, community-built open-source tooling for the MoTeC® M1 script
 language. Not affiliated with, authorised, or endorsed by MoTeC Pty Ltd.
 "MoTeC" and "M1" are trademarks of MoTeC Pty Ltd.
+
+Component pickers use the M1 client attached to the buffer that opened them.
+Multiple attached M1 clients are reported as ambiguous. Symbols, detail queries
+and edits retain the originating project if you switch buffers while a picker or
+prompt is open. Project editing and call-rate pickers require a `nvim-m1` version
+with `project.bind_project`; older versions receive an update message before an
+edit can run.

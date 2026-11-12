@@ -18,7 +18,7 @@ describe("telescope-m1.ignore.merge_ignore", function()
   it("merges into a compact (no-space) array", function()
     local lines, status = ignore.merge_ignore({ 'ignore=["L001"]' }, "L002")
     assert.equals("merged", status)
-    assert.same({ 'ignore = ["L001", "L002"]' }, lines)
+    assert.same({ 'ignore=["L001", "L002"]' }, lines)
   end)
 
   it("tolerates a trailing comma in the existing array", function()
