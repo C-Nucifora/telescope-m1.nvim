@@ -63,7 +63,8 @@ function Picker.open(opts)
   local context = require("telescope-m1.lsp").capture_context()
   local prj = project.project_file(cfg)
   local uv = vim.uv or vim.loop
-  local client_project = uv.fs_realpath(context.project_file or "") or context.project_file
+  local client_project = uv.fs_realpath(context.project_file or "")
+    or context.project_file
   if client_project ~= (uv.fs_realpath(prj or "") or prj) then
     context.client = nil
     context.error = "no M1 client attached for this picker's project"

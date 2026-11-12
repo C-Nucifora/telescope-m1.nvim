@@ -108,7 +108,9 @@ describe("call rate project aliases", function()
       vim.fn.mkdir(dir .. "/" .. name, "p")
       vim.fn.writefile({ "<Project/>" }, dir .. "/" .. name .. "/Project.m1prj")
     end
-    assert((vim.uv or vim.loop).fs_symlink(dir .. "/real", dir .. "/alias", { dir = true }))
+    assert(
+      (vim.uv or vim.loop).fs_symlink(dir .. "/real", dir .. "/alias", { dir = true })
+    )
     buffer = vim.api.nvim_create_buf(true, false)
     vim.api.nvim_buf_set_name(buffer, dir .. "/alias/Main.m1scr")
     vim.api.nvim_set_current_buf(buffer)
@@ -119,36 +121,55 @@ describe("call rate project aliases", function()
     end
     package.loaded["nvim-m1"] = { config = {} }
     package.loaded["nvim-m1.project"] = {
-      bind_project = function(cfg) return cfg end,
-      project_file = function() return selected_project end,
-      rates = function() return { "100Hz" } end,
+      bind_project = function(cfg)
+        return cfg
+      end,
+      project_file = function()
+        return selected_project
+      end,
+      rates = function()
+        return { "100Hz" }
+      end,
     }
     pickers.new = function(_, value)
       definition = value
       return { find = function() end }
     end
     actions.close = function() end
-    actions.select_default.replace = function(_, callback) select_rate = callback end
-    state.get_selected_entry = function() return { "100Hz" } end
-    symbols.from_lsp = function(_, spec) context = spec.context end
+    actions.select_default.replace = function(_, callback)
+      select_rate = callback
+    end
+    state.get_selected_entry = function()
+      return { "100Hz" }
+    end
+    symbols.from_lsp = function(_, spec)
+      context = spec.context
+    end
   end)
 
   after_each(function()
-    package.loaded["nvim-m1"], package.loaded["nvim-m1.project"] = saved.nvim, saved.project
+    package.loaded["nvim-m1"], package.loaded["nvim-m1.project"] =
+      saved.nvim, saved.project
     vim.lsp.get_clients = saved.clients
     pickers.new, actions.close = saved.picker, saved.close
-    actions.select_default.replace, state.get_selected_entry = saved.replace, saved.selected
+    actions.select_default.replace, state.get_selected_entry =
+      saved.replace, saved.selected
     symbols.from_lsp = saved.symbols
     vim.api.nvim_set_current_buf(saved.buffer)
-    if buffer then vim.api.nvim_buf_delete(buffer, { force = true }) end
+    if buffer then
+      vim.api.nvim_buf_delete(buffer, { force = true })
+    end
     vim.fn.delete(dir, "rf")
   end)
 
   it("accepts both alias directions and still rejects another project", function()
     for _, case in ipairs({
-      { "real", "real", true }, { "alias", "real", true },
-      { "real", "alias", true }, { "alias", "alias", true },
-      { "other", "real", false }, { "real", "other", false },
+      { "real", "real", true },
+      { "alias", "real", true },
+      { "real", "alias", true },
+      { "alias", "alias", true },
+      { "other", "real", false },
+      { "real", "other", false },
     }) do
       client.config.root_dir = dir .. "/" .. case[1]
       selected_project = dir .. "/" .. case[2] .. "/Project.m1prj"
