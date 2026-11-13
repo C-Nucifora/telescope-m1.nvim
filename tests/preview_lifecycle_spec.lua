@@ -46,7 +46,10 @@ describe("preview request lifetime", function()
   end)
 
   local function select(entry)
-    preview:preview(entry, { preview_win = win })
+    preview:preview(entry, {
+      preview_win = win,
+      layout = { preview = { winid = win } },
+    })
     pump()
   end
   local function contents()
