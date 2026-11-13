@@ -37,13 +37,14 @@ describe("telescope-m1.typecheck_rules", function()
     end
   end)
 
-  it("fallback table covers T001..T110 endpoints", function()
+  it("fallback table covers T001..T117 endpoints", function()
     local by_code = {}
     for _, r in ipairs(tc.fallback_rules) do
       by_code[r.code] = r
     end
     assert.equals("unresolved-reference", (by_code.T001 or {}).name)
     assert.equals("dbc-signal-accessor-type", (by_code.T110 or {}).name)
+    assert.equals("user-call-in-condition-or-argument", (by_code.T117 or {}).name)
     -- T107 dbc-init-missing shipped in m1-typecheck (AV-M1 escape); a spot check
     -- that a recently-added code is present offline.
     assert.equals("dbc-init-missing", (by_code.T107 or {}).name)
