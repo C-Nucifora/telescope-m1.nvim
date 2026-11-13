@@ -62,56 +62,88 @@ end
 --- path -> record map. Calls `cb(nil)` when m1-project/nvim-m1/the project is
 --- unavailable — the previewer then renders the basic card only.
 ---@param cb fun(map: table<string, table>?)
-function M.fetch_details(cb)
+function M.fetch_details(cb, prj)
   local ok, nvim_m1 = pcall(require, "nvim-m1")
   if not ok or type(nvim_m1.config) ~= "table" then
     return cb(nil) -- nvim-m1 absent or not set up (e.g. headless tests)
   end
   local project = require("nvim-m1.project")
   local resolved, bin = pcall(project.resolve_cmd, nvim_m1.config)
-  local prj = project.project_file()
   if not resolved or not bin or not prj then
     return cb(nil)
   end
-  vim.system({ bin, "list-components", "--json", "--project", prj }, {}, function(res)
-    if res.code ~= 0 or not res.stdout or res.stdout == "" then
-      return vim.schedule(function()
-        cb(nil)
-      end)
-    end
-    local decoded_ok, records = pcall(vim.json.decode, res.stdout)
-    if not decoded_ok or type(records) ~= "table" then
-      return vim.schedule(function()
-        cb(nil)
-      end)
-    end
-    local map = {}
-    for _, r in ipairs(records) do
-      if type(r) == "table" and r.path then
-        map[r.path] = r
+  local spawned = pcall(
+    vim.system,
+    { bin, "list-components", "--json", "--project", prj },
+    {},
+    function(res)
+      if res.code ~= 0 or not res.stdout or res.stdout == "" then
+        return vim.schedule(function()
+          cb(nil)
+        end)
       end
+      local decoded_ok, records = pcall(vim.json.decode, res.stdout)
+      if not decoded_ok or type(records) ~= "table" then
+        return vim.schedule(function()
+          cb(nil)
+        end)
+      end
+      local map = {}
+      for _, r in ipairs(records) do
+        if type(r) == "table" and r.path then
+          map[r.path] = r
+        end
+      end
+      vim.schedule(function()
+        cb(map)
+      end)
     end
+  )
+  if not spawned then
     vim.schedule(function()
-      cb(map)
+      cb(nil)
     end)
-  end)
+  end
 end
 
 --- A previewer that renders the detail card for `.m1prj`-located entries and
 --- falls back to the normal buffer preview for script-backed ones.
 ---@param opts table
-function M.previewer(opts)
+function M.previewer(opts, prj)
   local previewers = require("telescope.previewers")
   local details ---@type table<string, table>?
+  local current, selected
+  local closed = false
+  local function paint()
+    if closed or not current or not selected then
+      return
+    end
+    local bufnr = current.state.bufnr
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+    local rec = details and M.lookup(details, selected.value.name or "") or nil
+    local lines = M.render_card(selected.value, rec)
+    vim.bo[bufnr].modifiable = true
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+    vim.bo[bufnr].modifiable = false
+  end
   M.fetch_details(function(map)
     details = map
-  end)
+    paint()
+  end, prj)
   return previewers.new_buffer_previewer({
     title = "M1 Component",
     get_buffer_by_name = function(_, entry)
       return entry.value.name or entry.filename
     end,
+    teardown = function()
+      closed = true
+      current, selected = nil, nil
+    end,
     define_preview = function(self, entry)
+      closed = false
+      current, selected = nil, nil
       local fname = entry.filename or ""
       if fname:sub(-6) ~= ".m1prj" then
         require("telescope.config").values.buffer_previewer_maker(
@@ -124,11 +156,8 @@ function M.previewer(opts)
         )
         return
       end
-      local rec = details and M.lookup(details, entry.value.name or "") or nil
-      local lines = M.render_card(entry.value, rec)
-      vim.bo[self.state.bufnr].modifiable = true
-      vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
-      vim.bo[self.state.bufnr].modifiable = false
+      current, selected = self, entry
+      paint()
     end,
   })
 end

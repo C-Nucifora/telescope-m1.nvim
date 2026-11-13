@@ -18,38 +18,45 @@ local function client_names()
   return names
 end
 
---- Find the active m1-lsp client.
----
---- Prefers a client named like m1-lsp; otherwise any client configured for the
---- `m1scr` filetype. We deliberately do NOT fall back to "any client
---- advertising workspace-symbol support": general-purpose servers (lua_ls,
---- pyright, …) all advertise `workspaceSymbolProvider`, so that fallback would
---- pick the wrong server and present its (non-M1) symbols as M1 components.
---- Only the `m1scr` filetype is a reliable M1 signal.
----@return vim.lsp.Client?
-function M.find_client()
-  -- The current buffer's project wins when multiple M1 workspaces are open.
-  for _, clients in ipairs({
-    vim.lsp.get_clients({ bufnr = 0 }),
-    vim.lsp.get_clients(),
-  }) do
-    for _, want in ipairs(client_names()) do
-      for _, c in ipairs(clients) do
-        if c.name == want then
-          return c
-        end
-      end
-    end
-
-    for _, c in ipairs(clients) do
-      local fts = (c.config or {}).filetypes or {}
-      if vim.tbl_contains(fts, "m1scr") then
-        return c
-      end
+--- Find one M1 client attached to the invocation buffer. Ambiguity is an error.
+---@param bufnr? integer
+---@return vim.lsp.Client?, string?
+function M.find_client(bufnr)
+  local candidates = {}
+  local names = client_names()
+  for _, client in
+    ipairs(vim.lsp.get_clients({ bufnr = bufnr or vim.api.nvim_get_current_buf() }))
+  do
+    if
+      vim.tbl_contains(names, client.name)
+      or vim.tbl_contains((client.config or {}).filetypes or {}, "m1scr")
+    then
+      candidates[#candidates + 1] = client
     end
   end
+  if #candidates == 1 then
+    return candidates[1]
+  end
+  if #candidates > 1 then
+    return nil,
+      "multiple M1 clients attached; detach the extra client before opening this picker"
+  end
+  return nil, "no m1-lsp client attached; open a .m1scr file in the project first"
+end
 
-  return nil
+--- Keep the client, request buffer and server project together across UI callbacks.
+function M.capture_context()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local client, err = M.find_client(bufnr)
+  local root = client and (client.root_dir or (client.config or {}).root_dir)
+  local prj
+  if type(root) == "string" and root ~= "" then
+    local candidate = vim.fs.normalize(root .. "/Project.m1prj")
+    if vim.fn.filereadable(candidate) == 1 then
+      prj = candidate
+    end
+  end
+  return { client = client, bufnr = bufnr, project_file = prj, error = err }
 end
 
 --- Issue an LSP request across the 0.10/0.11 `vim.lsp.Client.request` change.
@@ -65,11 +72,11 @@ end
 ---@param params table
 ---@param handler fun(err: any, result: any)
 ---@return boolean ok
-local function client_request(client, method, params, handler)
+local function client_request(client, method, params, handler, bufnr)
   if vim.fn.has("nvim-0.11") == 1 then
-    return client:request(method, params, handler)
+    return client:request(method, params, handler, bufnr)
   end
-  return client.request(method, params, handler)
+  return client.request(method, params, handler, bufnr)
 end
 
 --- Short label for an LSP SymbolKind number (e.g. 13 -> "Variable").
@@ -155,34 +162,46 @@ end
 --- list of entry tables (see `symbol_to_entry`), or an error string.
 ---@param query string
 ---@param cb fun(entries: table[]?, err: string?)
-function M.workspace_symbols(query, cb)
-  local client = M.find_client()
+function M.workspace_symbols(query, cb, context)
+  context = context or M.capture_context()
+  local client = context.client
   if not client then
     return cb(
       nil,
-      "no m1-lsp client attached — open a .m1scr file in the project first"
+      context.error or "no m1-lsp client attached to the originating buffer"
     )
   end
 
-  local ok, requested = pcall(function()
+  local completed = false
+  local function finish(entries, err)
+    if completed then
+      return
+    end
+    completed = true
+    cb(entries, err)
+  end
+  local ok, accepted = pcall(function()
     return client_request(
       client,
       "workspace/symbol",
       { query = query or "" },
       function(err, result)
         if err then
-          return cb(nil, err.message or tostring(err))
+          return finish(nil, err.message or tostring(err))
         end
         local entries = {}
         for _, sym in ipairs(result or {}) do
-          entries[#entries + 1] = M.symbol_to_entry(sym)
+          local entry = M.symbol_to_entry(sym)
+          entry.project_file = context.project_file
+          entries[#entries + 1] = entry
         end
-        cb(entries)
-      end
+        finish(entries)
+      end,
+      context.bufnr
     )
   end)
-  if not ok or requested == false then
-    cb(nil, "workspace/symbol request failed")
+  if not ok or accepted == false then
+    finish(nil, "workspace/symbol request failed")
   end
 end
 

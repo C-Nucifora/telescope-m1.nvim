@@ -52,6 +52,23 @@ local function ignore_in_config(code)
     vim.fs.find(".m1lint.toml", { upward = true, path = dir, type = "file" })
   local path = found[1] or (dir .. "/.m1lint.toml")
 
+  local function canonical(name)
+    return vim.uv.fs_realpath(name) or vim.fs.normalize(vim.fn.fnamemodify(name, ":p"))
+  end
+  local target = canonical(path)
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    local name = vim.api.nvim_buf_get_name(bufnr)
+    if name ~= "" and vim.bo[bufnr].modified and canonical(name) == target then
+      vim.notify(
+        "telescope-m1: save or discard unsaved changes to "
+          .. path
+          .. " before adding an ignore",
+        vim.log.levels.WARN
+      )
+      return
+    end
+  end
+
   local lines = vim.fn.filereadable(path) == 1 and vim.fn.readfile(path) or {}
   local new_lines, status = ignore.merge_ignore(lines, code)
 
@@ -67,7 +84,7 @@ local function ignore_in_config(code)
     vim.notify(
       "telescope-m1: "
         .. path
-        .. " has an `ignore` array that is opened but never closed; "
+        .. " has an unsupported or malformed ignore configuration; "
         .. "left it unchanged — please add "
         .. code
         .. " by hand.",

@@ -31,7 +31,7 @@ end
 ---@field name string
 
 --- Fallback only — used when no m1-typecheck binary can be resolved at all.
---- Snapshot of `m1-typecheck --rules --format json` at v0.51.0 (T001–T111, with
+--- Snapshot of `m1-typecheck --rules --format json` at v0.52.0 (T001–T117, with
 --- the catalogue's natural gaps). The sync spec fails if the released binary
 --- drifts from this list, so it belongs in the same release cascade.
 ---@type M1TypeCheckRule[]
@@ -91,6 +91,12 @@ M.fallback_rules = {
   { code = "T109", name = "dbc-message-direction" },
   { code = "T110", name = "dbc-signal-accessor-type" },
   { code = "T111", name = "flash-without-preserve" },
+  { code = "T112", name = "invalid-component-tags" },
+  { code = "T113", name = "incomplete-module-metadata" },
+  { code = "T114", name = "return-multiple-assignment" },
+  { code = "T115", name = "return-not-assigned-on-all-paths" },
+  { code = "T116", name = "discarded-user-return" },
+  { code = "T117", name = "user-call-in-condition-or-argument" },
 }
 
 --- All T-codes, in code order: the bundled binary's catalogue when available
@@ -130,14 +136,27 @@ function M.parse_catalogue(output)
     return nil
   end
   local ok, data = pcall(vim.json.decode, output)
-  if not ok or type(data) ~= "table" or type(data.rules) ~= "table" then
+  if
+    not ok
+    or type(data) ~= "table"
+    or type(data.rules) ~= "table"
+    or not vim.islist(data.rules)
+  then
     return nil
   end
   local by_code = {}
   for _, r in ipairs(data.rules) do
-    if r.code then
-      by_code[r.code] = { name = r.name }
+    if
+      type(r) ~= "table"
+      or type(r.code) ~= "string"
+      or r.code == ""
+      or type(r.name) ~= "string"
+      or r.name == ""
+      or by_code[r.code]
+    then
+      return nil
     end
+    by_code[r.code] = { name = r.name }
   end
   return by_code
 end

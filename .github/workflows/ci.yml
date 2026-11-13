@@ -57,22 +57,27 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: nvim-telescope/telescope.nvim
+          ref: 0.1.8
           path: deps/telescope.nvim
 
-      - name: Install m1-lint (best-effort, enables the rules-sync spec)
-        continue-on-error: true
+      - name: Install verified catalogue binaries
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           mkdir -p "$HOME/.local/bin"
-          gh release download --repo C-Nucifora/m1-lint \
-            --pattern "m1-lint-x86_64-unknown-linux-gnu" \
-            -O "$HOME/.local/bin/m1-lint" 2>/dev/null \
-            && chmod +x "$HOME/.local/bin/m1-lint" || true
+          for tool in m1-lint m1-typecheck; do
+            gh release download --repo "C-Nucifora/$tool" \
+              --pattern "$tool-x86_64-unknown-linux-gnu" \
+              -O "$HOME/.local/bin/$tool"
+            gh attestation verify "$HOME/.local/bin/$tool" --repo "C-Nucifora/$tool"
+            chmod +x "$HOME/.local/bin/$tool"
+          done
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Run tests
         env:
+          M1_REQUIRE_CATALOGUES: "1"
           PLENARY_PATH: ${{ github.workspace }}/deps/plenary.nvim
           TELESCOPE_PATH: ${{ github.workspace }}/deps/telescope.nvim
         run: scripts/test.sh

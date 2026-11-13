@@ -331,19 +331,35 @@ function M.parse_catalogue(output)
     return nil
   end
   local ok, data = pcall(vim.json.decode, output)
-  if not ok or type(data) ~= "table" or type(data.rules) ~= "table" then
+  if
+    not ok
+    or type(data) ~= "table"
+    or type(data.rules) ~= "table"
+    or not vim.islist(data.rules)
+  then
     return nil
   end
   local by_code = {}
   for _, r in ipairs(data.rules) do
-    if r.code then
-      by_code[r.code] = {
-        name = r.name,
-        fixable = r.fixable,
-        severity = r.severity,
-        summary = r.summary,
-      }
+    if
+      type(r) ~= "table"
+      or type(r.code) ~= "string"
+      or r.code == ""
+      or type(r.name) ~= "string"
+      or r.name == ""
+      or by_code[r.code]
+    then
+      return nil
     end
+    if
+      (r.fixable ~= nil and type(r.fixable) ~= "boolean")
+      or (r.severity ~= nil and type(r.severity) ~= "string")
+      or (r.summary ~= nil and type(r.summary) ~= "string")
+    then
+      return nil
+    end
+    by_code[r.code] =
+      { name = r.name, fixable = r.fixable, severity = r.severity, summary = r.summary }
   end
   return by_code
 end

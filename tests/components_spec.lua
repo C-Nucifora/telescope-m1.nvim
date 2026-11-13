@@ -29,14 +29,15 @@ local function run_goto_backing_script(entry)
   local edit_arg = nil
   local notifications = {}
 
-  local orig_cmd_edit = vim.cmd.edit
+  local orig_cmd_edit = vim.api.nvim_cmd
   local orig_notify = vim.notify
   local orig_get_selected = action_state.get_selected_entry
   local orig_close = actions.close
 
-  vim.cmd.edit = function(arg)
+  vim.api.nvim_cmd = function(arg)
+    assert.same({ file = false }, arg.magic)
     edit_called = true
-    edit_arg = arg
+    edit_arg = arg.args[1]
   end
   vim.notify = function(msg, level)
     notifications[#notifications + 1] = { msg = msg, level = level }
@@ -48,7 +49,7 @@ local function run_goto_backing_script(entry)
 
   components._goto_backing_script(0) -- bufnr is only forwarded to actions.close
 
-  vim.cmd.edit = orig_cmd_edit
+  vim.api.nvim_cmd = orig_cmd_edit
   vim.notify = orig_notify
   action_state.get_selected_entry = orig_get_selected
   actions.close = orig_close
@@ -169,6 +170,9 @@ local function run_edit(handler, entry, project, ui_choice)
     end
   end
 
+  wrapped.bind_project = function(cfg, prj)
+    return vim.tbl_extend("force", cfg, { _project_file = prj })
+  end
   action_state.get_selected_entry = function()
     return entry
   end
@@ -209,7 +213,8 @@ local function run_edit(handler, entry, project, ui_choice)
 end
 
 describe("components picker: project_edit dispatch (#45)", function()
-  local entry = { value = { name = "Root.Vehicle.Speed" } }
+  local entry =
+    { value = { name = "Root.Vehicle.Speed", project_file = "/fixture/Project.m1prj" } }
   -- A fake nvim-m1.project that exposes every editor wired by the picker.
   local full_project = {
     set_security = false,
@@ -247,7 +252,8 @@ describe("components picker: project_edit dispatch (#45)", function()
 end)
 
 describe("components picker: select_edit attribute menu (#45)", function()
-  local entry = { value = { name = "Root.Vehicle.Speed" } }
+  local entry =
+    { value = { name = "Root.Vehicle.Speed", project_file = "/fixture/Project.m1prj" } }
   local full_project = {
     set_quantity = false,
     set_validation = false,

@@ -42,9 +42,9 @@ local EXTRA_EDITS = {
 --- (not an error) when nvim-m1 is absent or too old to expose `fn_name`, so a
 --- newer telescope-m1 stays usable against an older nvim-m1.
 ---@param fn_name "set_security"|"set_type"|"set_unit"|"rename_component"|"delete_component"|"set_quantity"|"set_validation"|"set_format"|"set_dps"|"set_display_range"|"add_tag"|"remove_tag"
-local function project_edit(fn_name)
+local function project_edit(fn_name, selected)
   return function(bufnr)
-    local entry = action_state.get_selected_entry()
+    local entry = selected or action_state.get_selected_entry()
     if not entry then
       return
     end
@@ -61,8 +61,23 @@ local function project_edit(fn_name)
       )
       return
     end
+    if type(project.bind_project) ~= "function" then
+      vim.notify(
+        "telescope-m1: update nvim-m1 to keep edits on the selected project",
+        vim.log.levels.WARN
+      )
+      return
+    end
+    if not entry.value.project_file then
+      vim.notify(
+        "telescope-m1: this symbol has no bound project; reopen from a project buffer",
+        vim.log.levels.WARN
+      )
+      return
+    end
+    local cfg = project.bind_project(nvim_m1.config, entry.value.project_file)
     actions.close(bufnr)
-    project[fn_name](nvim_m1.config, entry.value.name)
+    project[fn_name](cfg, entry.value.name)
   end
 end
 
@@ -71,7 +86,8 @@ end
 --- attribute is chosen *before* the picker closes (so the entry is still the
 --- selection), then `project_edit` runs the editor.
 local function select_edit(bufnr)
-  if not action_state.get_selected_entry() then
+  local selected = action_state.get_selected_entry()
+  if not selected then
     return
   end
   local labels = {}
@@ -84,7 +100,7 @@ local function select_edit(bufnr)
     end
     for _, e in ipairs(EXTRA_EDITS) do
       if e.label == choice then
-        project_edit(e.fn)(bufnr)
+        project_edit(e.fn, selected)(bufnr)
         return
       end
     end
@@ -111,7 +127,10 @@ local function goto_backing_script(bufnr)
     return
   end
   actions.close(bufnr)
-  vim.cmd.edit(entry.filename)
+  vim.api.nvim_cmd(
+    { cmd = "edit", args = { entry.filename }, magic = { file = false } },
+    {}
+  )
   if entry.lnum then
     pcall(vim.api.nvim_win_set_cursor, 0, { entry.lnum, 0 })
   end
@@ -138,13 +157,18 @@ Picker._EXTRA_EDITS = EXTRA_EDITS
 ---@param opts? table
 function Picker.open(opts)
   opts = opts or {}
+  local context = m1_lsp.capture_context()
   symbol_picker.from_lsp(opts, {
     title = "M1 Components",
+    context = context,
     query = "",
     hierarchy = true,
     transform = m1_lsp.build_hierarchy,
     -- Detail card instead of raw Project.m1prj XML for component rows (#23).
-    previewer = require("telescope-m1.component_preview").previewer(opts),
+    previewer = require("telescope-m1.component_preview").previewer(
+      opts,
+      context.project_file
+    ),
     attach_mappings = function(_, map)
       map({ "i", "n" }, "<C-f>", goto_backing_script)
       map({ "i", "n" }, "<C-s>", project_edit("set_security"))
